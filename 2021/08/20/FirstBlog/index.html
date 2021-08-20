@@ -8,17 +8,17 @@
   <link rel="dns-prefetch" href="http://gaohuatao-1.github.io">
   <title>FirstBlog | 高华涛的博客</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-  <meta name="description" content="Hi Abby, welcome to my space! 其实，我想说很多，奈何，键盘总是跟不上我灵光活泛的大脑！那就，简而言之吧。。What are you looking at? Come back home tonight, you cook! 哈哈哈～～～  I love you forever~~~">
+  <meta name="description" content="杂记开启coredump1234mkdir -p &#x2F;tmp&#x2F;coredump&#x2F;ulimit -c unlimitedecho &quot;&#x2F;tmp&#x2F;coredump&#x2F;core-%e-%p-%t&quot; &gt; &#x2F;proc&#x2F;sys&#x2F;kernel&#x2F;core_patterngdb .&#x2F;a.out &#x2F;tmp&#x2F;coredump&#x2F;core-a.out-3750-158313  hexo 增加博客123#">
 <meta property="og:type" content="article">
 <meta property="og:title" content="FirstBlog">
 <meta property="og:url" content="http://gaohuatao-1.github.io/2021/08/20/FirstBlog/index.html">
 <meta property="og:site_name" content="高华涛的博客">
-<meta property="og:description" content="Hi Abby, welcome to my space! 其实，我想说很多，奈何，键盘总是跟不上我灵光活泛的大脑！那就，简而言之吧。。What are you looking at? Come back home tonight, you cook! 哈哈哈～～～  I love you forever~~~">
+<meta property="og:description" content="杂记开启coredump1234mkdir -p &#x2F;tmp&#x2F;coredump&#x2F;ulimit -c unlimitedecho &quot;&#x2F;tmp&#x2F;coredump&#x2F;core-%e-%p-%t&quot; &gt; &#x2F;proc&#x2F;sys&#x2F;kernel&#x2F;core_patterngdb .&#x2F;a.out &#x2F;tmp&#x2F;coredump&#x2F;core-a.out-3750-158313  hexo 增加博客123#">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2021-08-20T03:25:15.000Z">
-<meta property="article:modified_time" content="2021-08-20T03:51:25.728Z">
+<meta property="article:modified_time" content="2021-08-20T09:19:42.304Z">
 <meta property="article:author" content="Gao Huatao">
-<meta property="article:tag" content="Private">
+<meta property="article:tag" content="Linux">
 <meta name="twitter:card" content="summary">
   
     <link rel="alternative" href="/atom.xml" title="高华涛的博客" type="application/atom+xml">
@@ -175,9 +175,10 @@
     
     <div class="article-entry" itemprop="articleBody">
       
-        <p>Hi Abby, welcome to my space!</p>
-<p>其实，我想说很多，奈何，键盘总是跟不上我灵光活泛的大脑！<br>那就，简而言之吧。。<br>What are you looking at? Come back home tonight, you cook!</p>
-<p>哈哈哈～～～  I love you forever~~~</p>
+        <h2 id="杂记"><a href="#杂记" class="headerlink" title="杂记"></a>杂记</h2><h3 id="开启coredump"><a href="#开启coredump" class="headerlink" title="开启coredump"></a>开启coredump</h3><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">mkdir -p /tmp/coredump/</span><br><span class="line"><span class="built_in">ulimit</span> -c unlimited</span><br><span class="line"><span class="built_in">echo</span> <span class="string">&quot;/tmp/coredump/core-%e-%p-%t&quot;</span> &gt; /proc/sys/kernel/core_pattern</span><br><span class="line">gdb ./a.out /tmp/coredump/core-a.out-3750-158313</span><br></pre></td></tr></table></figure>
+
+<h3 id="hexo-增加博客"><a href="#hexo-增加博客" class="headerlink" title="hexo 增加博客"></a>hexo 增加博客</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"># 进入hexo根路径</span><br><span class="line">hexo new &quot;xxx&quot;</span><br><span class="line">hexo clean &amp;&amp; hexo g &amp;&amp; hexo d</span><br></pre></td></tr></table></figure>
+
 
       
 
@@ -212,7 +213,7 @@
 		<ul class="article-tag-list">
 			 
         		<li class="article-tag-list-item">
-        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color3">Private</a>
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color1">Linux</a>
         		</li>
       		
 		</ul>
@@ -282,11 +283,15 @@
   
 <nav id="article-nav">
   
-  
-    <a href="/2021/08/20/hello-world/" id="article-nav-older" class="article-nav-link-wrap">
-      <div class="article-nav-title">Hello World</div>
-      <i class="icon-circle-right"></i>
+    <a href="/2021/08/20/hello-world/" id="article-nav-newer" class="article-nav-link-wrap">
+      <i class="icon-circle-left"></i>
+      <div class="article-nav-title">
+        
+          Hello World
+        
+      </div>
     </a>
+  
   
 </nav>
 
@@ -410,7 +415,7 @@ return o(i(t),arguments.length<2?void 0:u(arguments[1]))}})},function(t,n,r){var
           <ul class="article-tag-list" q-show="showTags">
              
               <li class="article-tag-list-item">
-                <a href="javascript:void(0)" class="js-tag color3">Private</a>
+                <a href="javascript:void(0)" class="js-tag color1">Linux</a>
               </li>
             
             <div class="clearfix"></div>

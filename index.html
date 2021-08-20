@@ -155,82 +155,6 @@
           <div id="js-content" class="content-ll">
             
   
-    <article id="post-FirstBlog" class="article article-type-post  article-index" itemscope itemprop="blogPost">
-  <div class="article-inner">
-    
-      <header class="article-header">
-        
-  
-    <h1 itemprop="name">
-      <a class="article-title" href="/2021/08/20/FirstBlog/">FirstBlog</a>
-    </h1>
-  
-
-        
-        <a href="/2021/08/20/FirstBlog/" class="archive-article-date">
-  	<time datetime="2021-08-20T03:25:15.000Z" itemprop="datePublished"><i class="icon-calendar icon"></i>2021-08-20</time>
-</a>
-        
-      </header>
-    
-    <div class="article-entry" itemprop="articleBody">
-      
-        <p>Hi Abby, welcome to my space!</p>
-<p>其实，我想说很多，奈何，键盘总是跟不上我灵光活泛的大脑！<br>那就，简而言之吧。。<br>What are you looking at? Come back home tonight, you cook!</p>
-<p>哈哈哈～～～  I love you forever~~~</p>
-
-      
-
-      
-    </div>
-    <div class="article-info article-info-index">
-      
-      
-	<div class="article-tag tagcloud">
-		<i class="icon-price-tags icon"></i>
-		<ul class="article-tag-list">
-			 
-        		<li class="article-tag-list-item">
-        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color3">Private</a>
-        		</li>
-      		
-		</ul>
-	</div>
-
-      
-
-      
-        <p class="article-more-link">
-          <a class="article-more-a" href="/2021/08/20/FirstBlog/">展开全文 >></a>
-        </p>
-      
-
-      
-      <div class="clearfix"></div>
-    </div>
-  </div>
-</article>
-
-<aside class="wrap-side-operation">
-    <div class="mod-side-operation">
-        
-        <div class="jump-container" id="js-jump-container" style="display:none;">
-            <a href="javascript:void(0)" class="mod-side-operation__jump-to-top">
-                <i class="icon-font icon-back"></i>
-            </a>
-            <div id="js-jump-plan-container" class="jump-plan-container" style="top: -11px;">
-                <i class="icon-font icon-plane jump-plane"></i>
-            </div>
-        </div>
-        
-        
-    </div>
-</aside>
-
-
-
-
-  
     <article id="post-hello-world" class="article article-type-post  article-index" itemscope itemprop="blogPost">
   <div class="article-inner">
     
@@ -244,7 +168,7 @@
 
         
         <a href="/2021/08/20/hello-world/" class="archive-article-date">
-  	<time datetime="2021-08-20T02:29:19.670Z" itemprop="datePublished"><i class="icon-calendar icon"></i>2021-08-20</time>
+  	<time datetime="2021-08-20T09:19:42.304Z" itemprop="datePublished"><i class="icon-calendar icon"></i>2021-08-20</time>
 </a>
         
       </header>
@@ -277,6 +201,83 @@
       
         <p class="article-more-link">
           <a class="article-more-a" href="/2021/08/20/hello-world/">展开全文 >></a>
+        </p>
+      
+
+      
+      <div class="clearfix"></div>
+    </div>
+  </div>
+</article>
+
+<aside class="wrap-side-operation">
+    <div class="mod-side-operation">
+        
+        <div class="jump-container" id="js-jump-container" style="display:none;">
+            <a href="javascript:void(0)" class="mod-side-operation__jump-to-top">
+                <i class="icon-font icon-back"></i>
+            </a>
+            <div id="js-jump-plan-container" class="jump-plan-container" style="top: -11px;">
+                <i class="icon-font icon-plane jump-plane"></i>
+            </div>
+        </div>
+        
+        
+    </div>
+</aside>
+
+
+
+
+  
+    <article id="post-FirstBlog" class="article article-type-post  article-index" itemscope itemprop="blogPost">
+  <div class="article-inner">
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="article-title" href="/2021/08/20/FirstBlog/">FirstBlog</a>
+    </h1>
+  
+
+        
+        <a href="/2021/08/20/FirstBlog/" class="archive-article-date">
+  	<time datetime="2021-08-20T03:25:15.000Z" itemprop="datePublished"><i class="icon-calendar icon"></i>2021-08-20</time>
+</a>
+        
+      </header>
+    
+    <div class="article-entry" itemprop="articleBody">
+      
+        <h2 id="杂记"><a href="#杂记" class="headerlink" title="杂记"></a>杂记</h2><h3 id="开启coredump"><a href="#开启coredump" class="headerlink" title="开启coredump"></a>开启coredump</h3><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">mkdir -p /tmp/coredump/</span><br><span class="line"><span class="built_in">ulimit</span> -c unlimited</span><br><span class="line"><span class="built_in">echo</span> <span class="string">&quot;/tmp/coredump/core-%e-%p-%t&quot;</span> &gt; /proc/sys/kernel/core_pattern</span><br><span class="line">gdb ./a.out /tmp/coredump/core-a.out-3750-158313</span><br></pre></td></tr></table></figure>
+
+<h3 id="hexo-增加博客"><a href="#hexo-增加博客" class="headerlink" title="hexo 增加博客"></a>hexo 增加博客</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"># 进入hexo根路径</span><br><span class="line">hexo new &quot;xxx&quot;</span><br><span class="line">hexo clean &amp;&amp; hexo g &amp;&amp; hexo d</span><br></pre></td></tr></table></figure>
+
+
+      
+
+      
+    </div>
+    <div class="article-info article-info-index">
+      
+      
+	<div class="article-tag tagcloud">
+		<i class="icon-price-tags icon"></i>
+		<ul class="article-tag-list">
+			 
+        		<li class="article-tag-list-item">
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color1">Linux</a>
+        		</li>
+      		
+		</ul>
+	</div>
+
+      
+
+      
+        <p class="article-more-link">
+          <a class="article-more-a" href="/2021/08/20/FirstBlog/">展开全文 >></a>
         </p>
       
 
@@ -399,7 +400,7 @@ return o(i(t),arguments.length<2?void 0:u(arguments[1]))}})},function(t,n,r){var
           <ul class="article-tag-list" q-show="showTags">
              
               <li class="article-tag-list-item">
-                <a href="javascript:void(0)" class="js-tag color3">Private</a>
+                <a href="javascript:void(0)" class="js-tag color1">Linux</a>
               </li>
             
             <div class="clearfix"></div>
