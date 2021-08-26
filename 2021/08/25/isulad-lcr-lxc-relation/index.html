@@ -6,20 +6,23 @@
   <meta name="renderer" content="webkit">
   <meta http-equiv="X-UA-Compatible" content="IE=edge" >
   <link rel="dns-prefetch" href="http://gaohuatao-1.github.io">
-  <title>iSulad对接多种runtime | 高华涛的博客</title>
+  <title>iSulad支持多种容器运行时的分析 | 高华涛的博客</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-  <meta name="description" content="iSulad当前支持多种类型的容器运行时 runtime， 如 lxc 、runc 和 kata-runtime， 同时支持 shim v1 和 shim v2。本文主要包括一下内容：  iSulad拉起容器过程中各组件的调用关系 ​    shim v1 和 shim v2的关系  iSulad容器引擎组件调用链iSulad作为一个超轻、超快的轻量级容器引擎，支持多种runtime和容器类型，">
+  <meta name="description" content="iSulad当前支持多种类型的容器运行时 runtime， 如 lxc 、runc 和 kata-runtime， 同时支持 shim v1 和 shim v2。本文主要包括一下内容：  iSulad拉起容器过程中各组件的调用关系 iSulad中shim v1 和 shim v2的关系  iSulad容器引擎组件调用链iSulad作为一个超轻、超快的轻量级容器引擎，支持多种runtime和容器类型">
 <meta property="og:type" content="article">
-<meta property="og:title" content="iSulad对接多种runtime">
+<meta property="og:title" content="iSulad支持多种容器运行时的分析">
 <meta property="og:url" content="http://gaohuatao-1.github.io/2021/08/25/isulad-lcr-lxc-relation/index.html">
 <meta property="og:site_name" content="高华涛的博客">
-<meta property="og:description" content="iSulad当前支持多种类型的容器运行时 runtime， 如 lxc 、runc 和 kata-runtime， 同时支持 shim v1 和 shim v2。本文主要包括一下内容：  iSulad拉起容器过程中各组件的调用关系 ​    shim v1 和 shim v2的关系  iSulad容器引擎组件调用链iSulad作为一个超轻、超快的轻量级容器引擎，支持多种runtime和容器类型，">
+<meta property="og:description" content="iSulad当前支持多种类型的容器运行时 runtime， 如 lxc 、runc 和 kata-runtime， 同时支持 shim v1 和 shim v2。本文主要包括一下内容：  iSulad拉起容器过程中各组件的调用关系 iSulad中shim v1 和 shim v2的关系  iSulad容器引擎组件调用链iSulad作为一个超轻、超快的轻量级容器引擎，支持多种runtime和容器类型">
 <meta property="og:locale" content="en_US">
+<meta property="og:image" content="https://openeuler.org/assets/img/2021-04-09-isulad-shimv2-arch-1.cd990794.png">
+<meta property="og:image" content="https://openeuler.org/assets/img/2021-04-09-isulad-shimv2-shimv2-differences.3c0ea142.png">
 <meta property="article:published_time" content="2021-08-25T01:28:06.000Z">
-<meta property="article:modified_time" content="2021-08-25T09:46:04.693Z">
+<meta property="article:modified_time" content="2021-08-26T01:38:27.922Z">
 <meta property="article:author" content="Gao Huatao">
-<meta property="article:tag" content="iSulad">
+<meta property="article:tag" content="iSulad,runtime">
 <meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://openeuler.org/assets/img/2021-04-09-isulad-shimv2-arch-1.cd990794.png">
   
     <link rel="alternative" href="/atom.xml" title="高华涛的博客" type="application/atom+xml">
   
@@ -162,7 +165,7 @@
         
   
     <h1 class="article-title" itemprop="name">
-      iSulad对接多种runtime
+      iSulad支持多种容器运行时的分析
     </h1>
   
 
@@ -178,7 +181,7 @@
         <p>iSulad当前支持多种类型的容器运行时 runtime， 如 lxc 、runc 和 kata-runtime， 同时支持 shim v1 和 shim v2。本文主要包括一下内容：</p>
 <ol>
 <li>iSulad拉起容器过程中各组件的调用关系</li>
-<li>​    shim v1 和 shim v2的关系</li>
+<li>iSulad中shim v1 和 shim v2的关系</li>
 </ol>
 <h2 id="iSulad容器引擎组件调用链"><a href="#iSulad容器引擎组件调用链" class="headerlink" title="iSulad容器引擎组件调用链"></a>iSulad容器引擎组件调用链</h2><p>iSulad作为一个超轻、超快的轻量级容器引擎，支持多种runtime和容器类型， 从isulad到运行一个container的组件调用链路如下图所示。</p>
 <pre class="mermaid">graph TD
@@ -198,7 +201,23 @@
     isulad-shim--> runc
     runc-->container</pre>
 
-<h2 id="shim-v1-和-shim-v2的关系"><a href="#shim-v1-和-shim-v2的关系" class="headerlink" title="shim v1 和 shim v2的关系"></a>shim v1 和 shim v2的关系</h2>
+
+
+<h2 id="iSulad-中shim-v1-和-shim-v2实现分析"><a href="#iSulad-中shim-v1-和-shim-v2实现分析" class="headerlink" title="iSulad 中shim v1 和 shim v2实现分析"></a>iSulad 中shim v1 和 shim v2实现分析</h2><p>在shimV1架构中，安全容器的启动涉及kata-shim、 kata-runtime、   kata-proxy、kata-agent组件以及用于创建虚机的qemu组件。在shimV2架构中，将shim、proxy和runtime集成到一个二进制中，当启动pause容器和在pause中启动业务容器时，host  os中只存在一个containerd-shim-kata-v2进程和qemu-kvm进程，也就是说pause容器和其中的业务容器共用同一个containerd-shim-kata-v2进程和虚拟机。<a target="_blank" rel="noopener" href="https://github.com/kata-containers/documentation/blob/master/design/architecture.md">shimV2和shimV1架构对比</a>如下。shimV1在单pause+多业务容器场景，每启动一个pause或者业务容器都有一个containerd-shim或者isulad-shim、kata-shim进程被拉起，pause和其中的业务容器共用kata-proxy(非vsock)进程和虚机进程（2N+1）。然而， shimV2在单pause+多业务容器场景中，host  os中只有一个containerd-shim-kata-v2进程和qemu-kvm进程，调用链更短，  总体底噪更低，特别是当pause中业务容器数量增加时，低底噪优势将更加明显。</p>
+<p><img src="https://openeuler.org/assets/img/2021-04-09-isulad-shimv2-arch-1.cd990794.png" alt="img"></p>
+<ul>
+<li>iSulad中shimv1的实现</li>
+</ul>
+<p>isulad-shim组件作为iSulad中shimv1的实现方案，代码在iSulad仓库中，随iSulad一起编译安装；可用于对接不同的OCI Runtime， 如runc、kata-runtime.</p>
+<ul>
+<li>iSulad中shimv2的实现</li>
+</ul>
+<p>当前iSulad对接shimv2仍处于调试阶段，shimV2分为containerd-shim-kata-v2和containerd-shim-runc-v2两种实现，本文以containerd-shim-kata-v2作为对象，分析在shimv2场景下，安全容器的退出监控实现机制。</p>
+<ul>
+<li>shimv1和shimv2的区别如下图所示</li>
+</ul>
+<p><img src="https://openeuler.org/assets/img/2021-04-09-isulad-shimv2-shimv2-differences.3c0ea142.png" alt="shimv-shimv2-diff"></p>
+
       
 
       
@@ -232,7 +251,7 @@
 		<ul class="article-tag-list">
 			 
         		<li class="article-tag-list-item">
-        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color2">iSulad</a>
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color5">iSulad,runtime</a>
         		</li>
       		
 		</ul>
@@ -446,6 +465,10 @@ return o(i(t),arguments.length<2?void 0:u(arguments[1]))}})},function(t,n,r){var
              
               <li class="article-tag-list-item">
                 <a href="javascript:void(0)" class="js-tag color2">iSulad</a>
+              </li>
+             
+              <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color5">iSulad,runtime</a>
               </li>
             
             <div class="clearfix"></div>
