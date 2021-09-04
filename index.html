@@ -155,6 +155,135 @@
           <div id="js-content" class="content-ll">
             
   
+    <article id="post-isula-shimv2-stratovirt" class="article article-type-post  article-index" itemscope itemprop="blogPost">
+  <div class="article-inner">
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="article-title" href="/2021/09/04/isula-shimv2-stratovirt/">iSula对接shim v2安全容器</a>
+    </h1>
+  
+
+        
+        <a href="/2021/09/04/isula-shimv2-stratovirt/" class="archive-article-date">
+  	<time datetime="2021-09-04T09:57:53.000Z" itemprop="datePublished"><i class="icon-calendar icon"></i>2021-09-04</time>
+</a>
+        
+      </header>
+    
+    <div class="article-entry" itemprop="articleBody">
+      
+        <h2 id="概述"><a href="#概述" class="headerlink" title="概述"></a>概述</h2><p>shim v2是最新一代shim架构方案，相比于shim v1，具有调用链更短、架构清晰的优势，在多业务容器container场景，具备明显的低内存开销优势。iSula运行安全容器可以通过isulad-shim或者containerd-shim-kata-v2来实现，其中isulad-shim组件式shim v1方案的具体实现，containerd-shim-kata-v2组件是shim v2方案在安全容器场景的一种具体实现，本文介绍iSula与containerd-shim-kata-v2的对接。</p>
+<h2 id="对接containerd-shim-v2-kata"><a href="#对接containerd-shim-v2-kata" class="headerlink" title="对接containerd-shim-v2-kata"></a>对接containerd-shim-v2-kata</h2><h3 id="前提条件"><a href="#前提条件" class="headerlink" title="前提条件"></a><strong>前提条件</strong></h3><p>安装 iSulad、lib-shim-v2和 kata-containers，并确保iSulad使用的devicemapper 存储驱动正常工作，当前stratovirt仅支持devicemapper存储驱动.</p>
+<p>此处给出安装 iSulad 和 kata-containers 并进行相应配置的参考方法。</p>
+<ol>
+<li><p>按照所使用的OS版本自行配置相应的 yum 源，使用 root 权限安装 iSulad、lib-shim-v2和kata-containers </p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#</span><span class="bash"> yum install iSulad</span></span><br><span class="line"><span class="meta">#</span><span class="bash"> yum install kata-containers</span></span><br><span class="line"><span class="meta">#</span><span class="bash"> yum install lib-shim-v2</span></span><br></pre></td></tr></table></figure></li>
+<li><p>制作并配置存储 Storage</p>
+<p>需要用户规划好磁盘如/dev/sdxx,该磁盘会被格式化，本文使用loop设备作为块设备进行演示，使用磁盘或者loop设备流程式相同的。</p>
+<p>创建10G空的loop设备</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">$ dd <span class="keyword">if</span>=/dev/zero of=isula.img bs=50M count=200</span><br><span class="line">$ mkfs.ext4 isula.img</span><br><span class="line">$ losetup /dev/loop0 isula.img</span><br></pre></td></tr></table></figure>
+
+<p>创建devicemapper</p>
+ <figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#</span><span class="bash"> 创建 pv</span></span><br><span class="line"><span class="meta">$</span><span class="bash"> pvcreate /dev/loop0</span></span><br><span class="line">  Physical volume &quot;/dev/loop0&quot; successfully created.</span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#</span><span class="bash"> 创建 vg</span></span><br><span class="line"><span class="meta">$</span><span class="bash"> vgcreate isula /dev/loop0</span></span><br><span class="line">  Volume group &quot;isula&quot; successfully created</span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#</span><span class="bash"> 创建 thinpool 以及 thinpoolmeta 逻辑卷</span></span><br><span class="line"><span class="meta">$</span><span class="bash"> lvcreate --wipesignatures y -n thinpool isula -l 95%VG</span></span><br><span class="line">  Logical volume &quot;thinpool&quot; created.</span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">$</span><span class="bash"> lvcreate --wipesignatures y -n thinpoolmeta isula -l 1%VG</span></span><br><span class="line">  Logical volume &quot;thinpoolmeta&quot; created.</span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#</span><span class="bash"> 将上面创建的逻辑卷转换为 thinpool</span></span><br><span class="line"><span class="meta">$</span><span class="bash"> lvconvert -y --zero n -c 64K \</span></span><br><span class="line"><span class="bash">--thinpool isula/thinpool \</span></span><br><span class="line"><span class="bash">--poolmetadata isula/thinpoolmeta</span></span><br><span class="line">  Thin pool volume with chunk size 512.00 KiB can address at most 126.50 TiB of data.</span><br><span class="line">  WARNING: Converting isula/thinpool and isula/thinpoolmeta to thin pool&#x27;s data and metadata volumes with metadata wiping.</span><br><span class="line">  THIS WILL DESTROY CONTENT OF LOGICAL VOLUME (filesystem etc.)</span><br><span class="line">  Converted isula/thinpool and isula/thinpoolmeta to thin pool.</span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#</span><span class="bash"> 创建并应用 lvm thinpool 自动扩展</span></span><br><span class="line"><span class="meta">$</span><span class="bash"> touch /etc/lvm/profile/isula-thinpool.profile</span></span><br><span class="line"><span class="meta">$</span><span class="bash"> cat &lt;&lt; <span class="string">EOF &gt; /etc/lvm/profile/isula-thinpool.profile</span></span></span><br><span class="line">activation &#123;</span><br><span class="line">  thin_pool_autoextend_threshold=80</span><br><span class="line">  thin_pool_autoextend_percent=20</span><br><span class="line">&#125;</span><br><span class="line">EOF</span><br><span class="line"><span class="meta">$</span><span class="bash"><span class="string"> lvchange --metadataprofile isula-thinpool isula/thinpool</span></span></span><br><span class="line">Logical volume isula/thinpool changed.</span><br></pre></td></tr></table></figure>
+
+<p>更改配置文件/etc/isulad/daemon.json中的storage-driver 和 storage-opts 如下：将默认存储驱动类型 overlay 配置成 devicemapper 。</p>
+ <figure class="highlight json"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"> &#123;</span><br><span class="line">    <span class="attr">&quot;storage-driver&quot;</span>: <span class="string">&quot;devicemapper&quot;</span>,</span><br><span class="line">    <span class="attr">&quot;storage-opts&quot;</span>: [</span><br><span class="line">        <span class="string">&quot;dm.thinpooldev=/dev/mapper/isula-thinpool&quot;</span>,</span><br><span class="line">        <span class="string">&quot;dm.fs=ext4&quot;</span>,</span><br><span class="line">        <span class="string">&quot;dm.min_free_space=10%&quot;</span></span><br><span class="line">    ]</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></li>
+<li><p>重启 isulad使得配置生效</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#</span><span class="bash"> systemctl daemon-reload</span></span><br><span class="line"><span class="meta">#</span><span class="bash"> systemctl restart isulad</span></span><br></pre></td></tr></table></figure></li>
+<li><p>确认 iSula 存储驱动是否配置成功</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#</span><span class="bash"> isula info</span></span><br></pre></td></tr></table></figure>
+
+<p> 若回显有如下信息，说明配置成功。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Storage Driver: devicemapper</span><br></pre></td></tr></table></figure></li>
+<li><p>配置默认runtime为io.containerd.kata.v2，表示isulad对接的是containerd-shim-kata-v2</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># vim /etc/isulad/daemon.json</span></span><br><span class="line"><span class="string">&quot;default-runtime&quot;</span>: <span class="string">&quot;io.containerd.kata.v2&quot;</span>,</span><br></pre></td></tr></table></figure></li>
+</ol>
+<h3 id="对接指导"><a href="#对接指导" class="headerlink" title="对接指导"></a>对接指导</h3><p>containerd-shim-kata-v2默认使用qemu虚拟化组件，下面分别介绍qemu和stratovirt两种虚拟化组件配置方法。</p>
+<h3 id="使用qemu虚拟化组件"><a href="#使用qemu虚拟化组件" class="headerlink" title="使用qemu虚拟化组件"></a>使用qemu虚拟化组件</h3><ol>
+<li><p>修改kata配置文件，路径为/usr/share/defaults/kata-containers/configuration.toml </p>
+<p>sandbox_cgroup_with_emulator 需要设置为false， 目前shimv2不支该改功能， 其他参数与shim v1中kata配置参数保持一致或者保持默认值。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">sandbox_cgroup_with_emulator = false</span><br></pre></td></tr></table></figure></li>
+<li><p>运行安全容器</p>
+<p>运行pause和container容器, 镜像id为c07ddb44daa9</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># isula run -tid --runtime io.containerd.kata.v2 --annotation io.kubernetes.docker.type=podsandbox  c07ddb44daa9 /bin/sh</span></span><br><span class="line">7c5dff1e57eed0d14d98c9c4f4a09461b743666ec19fc407252b844d5fe5951c</span><br><span class="line"><span class="comment"># isula run -tid --runtime io.containerd.kata.v2 --annotation io.kubernetes.docker.type=container --annotation io.kubernetes.sandbox.id=7c5dff1e57eed0d14d98c9c4f4a09461b743666ec19fc407252b844d5fe5951c e4db68de4ff2 /bin/sh</span></span><br></pre></td></tr></table></figure>
+
+<p>不指定容器类型时默认为podsandbox</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># isula run -tid --runtime io.containerd.kata.v2 c07ddb44daa9 /bin/sh</span></span><br></pre></td></tr></table></figure></li>
+</ol>
+<h3 id="使用stratovir虚拟化组件"><a href="#使用stratovir虚拟化组件" class="headerlink" title="使用stratovir虚拟化组件"></a>使用stratovir虚拟化组件</h3><ol>
+<li><p>在任一目录（例如 /home 目录）新建脚本文件 stratovirt.sh 并使用 root 权限给文件添加执行权限：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#</span><span class="bash"> touch /home/stratovirt.sh</span></span><br><span class="line"><span class="meta">#</span><span class="bash"> chmod +x /home/stratovirt.sh</span></span><br></pre></td></tr></table></figure>
+
+<p>stratovirt.sh 内容如下，用于指定 StratoVirt 路径：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">#!/bin/bash</span><br><span class="line">export STRATOVIRT_LOG_LEVEL=info  # set log level which includes trace, debug, info, warn and error.</span><br><span class="line">/usr/bin/stratovirt $@</span><br></pre></td></tr></table></figure></li>
+<li><p>修改 kata 配置文件 ，将安全容器的 hypervisor 类型配置为 stratovirt，kernel 配置 StratoVirt 的 kernel 镜像绝对路径（下载方式见下文），initrd 配置为 kata-containers 的 initrd 镜像文件（使用 yum 安装 kata-containers 时，默认会下载这个文件并存放在 /var/lib/kata/ 目录），stratovirt仅支持devicemapper存储模式，需提前准备好环境并将iSulad设置为devicemapper模式。</p>
+<p>配置参考如下：配置参考如下：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">[hypervisor.stratovirt]</span><br><span class="line">path = &quot;/home/stratovirt.sh&quot;</span><br><span class="line">kernel = &quot;/var/lib/kata/vmlinux.bin&quot;</span><br><span class="line">initrd = &quot;/var/lib/kata/kata-containers-initrd.img&quot;</span><br><span class="line">block_device_driver = &quot;virtio-mmio&quot;</span><br><span class="line">use_vsock = true</span><br><span class="line">enable_netmon = true</span><br><span class="line">internetworking_model=&quot;tcfilter&quot;</span><br><span class="line">sandbox_cgroup_with_emulator = false</span><br><span class="line">disable_new_netns = false</span><br><span class="line">disable_block_device_use = false</span><br><span class="line">disable_vhost_net = true</span><br></pre></td></tr></table></figure>
+
+<p>stratovirt需要开启vhost_vsock内核模块，检查是否开启</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">$ modprobe vhost_vsock</span><br><span class="line">$ lsmod |grep vhost_vsock</span><br></pre></td></tr></table></figure>
+
+<p>下载对应版本和架构的kernel并放到/var/lib/kata/路径下, 如下载openEuler 21.03版本x86架构的内核, <a target="_blank" rel="noopener" href="https://repo.openeuler.org/">openeuler repo</a>：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">$ <span class="built_in">cd</span> /var/lib/kata</span><br><span class="line">$ wget https://repo.openeuler.org/openEuler-21.03/stratovirt_img/x86_64/vmlinux.bin</span><br></pre></td></tr></table></figure></li>
+<li><p><strong>isula</strong> 命令运行 busybox 安全容器，容器运行成功，完成 StratoVirt 和 shim v2安全容器的对接。</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">$</span><span class="bash"> isula run -tid --runtime=io.containerd.kata.v2 --net=none --name <span class="built_in">test</span> busybox:latest sh</span></span><br></pre></td></tr></table></figure></li>
+</ol>
+
+      
+
+      
+    </div>
+    <div class="article-info article-info-index">
+      
+      
+	<div class="article-tag tagcloud">
+		<i class="icon-price-tags icon"></i>
+		<ul class="article-tag-list">
+			 
+        		<li class="article-tag-list-item">
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color2">iSulad,kata</a>
+        		</li>
+      		
+		</ul>
+	</div>
+
+      
+
+      
+        <p class="article-more-link">
+          <a class="article-more-a" href="/2021/09/04/isula-shimv2-stratovirt/">展开全文 >></a>
+        </p>
+      
+
+      
+      <div class="clearfix"></div>
+    </div>
+  </div>
+</article>
+
+<aside class="wrap-side-operation">
+    <div class="mod-side-operation">
+        
+        <div class="jump-container" id="js-jump-container" style="display:none;">
+            <a href="javascript:void(0)" class="mod-side-operation__jump-to-top">
+                <i class="icon-font icon-back"></i>
+            </a>
+            <div id="js-jump-plan-container" class="jump-plan-container" style="top: -11px;">
+                <i class="icon-font icon-plane jump-plane"></i>
+            </div>
+        </div>
+        
+        
+    </div>
+</aside>
+
+
+
+
+  
     <article id="post-isulad-lcr-lxc-relation" class="article article-type-post  article-index" itemscope itemprop="blogPost">
   <div class="article-inner">
     
@@ -737,6 +866,8 @@
 
 
 
+<h2 id="git-命令"><a href="#git-命令" class="headerlink" title="git 命令"></a>git 命令</h2><figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">$</span><span class="bash"> git config --global http.sslverify <span class="literal">false</span> <span class="comment"># 关闭ssl校验</span></span></span><br></pre></td></tr></table></figure>
+
 
 
 
@@ -1102,6 +1233,10 @@ return o(i(t),arguments.length<2?void 0:u(arguments[1]))}})},function(t,n,r){var
              
               <li class="article-tag-list-item">
                 <a href="javascript:void(0)" class="js-tag color2">iSulad</a>
+              </li>
+             
+              <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color2">iSulad,kata</a>
               </li>
              
               <li class="article-tag-list-item">
