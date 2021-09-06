@@ -6,18 +6,23 @@
   <meta name="renderer" content="webkit">
   <meta http-equiv="X-UA-Compatible" content="IE=edge" >
   <link rel="dns-prefetch" href="http://gaohuatao-1.github.io">
-  <title>Tag: iSulad,kata | 高华涛的博客</title>
+  <title>kata shimV2中监控容器退出机制的实现方案分析 | 高华涛的博客</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-  <meta name="description" content="浙江大学19届，现就职于华为，专注于云原生容器技术">
-<meta property="og:type" content="website">
-<meta property="og:title" content="高华涛的博客">
-<meta property="og:url" content="http://gaohuatao-1.github.io/tags/iSulad-kata/index.html">
+  <meta name="description" content="当前shim有shimV1和shimV2两种实现架构，shimV1作为传统shim的实现方案，主要被用作容器引擎和runtime的中间层，实现io、signals等的转发；最新版本的shimV2，在shimV1的基础上集成了runtime的功能，缩短了容器创建的调用链， 在某些场景能够有效降低底噪开销。在本文中的shimV2 默认使用的是containerd-shim-kata-v2，以此为分析对">
+<meta property="og:type" content="article">
+<meta property="og:title" content="kata shimV2中监控容器退出机制的实现方案分析">
+<meta property="og:url" content="http://gaohuatao-1.github.io/2021/09/06/isulad-shimv1-shimv2-diff/index.html">
 <meta property="og:site_name" content="高华涛的博客">
-<meta property="og:description" content="浙江大学19届，现就职于华为，专注于云原生容器技术">
+<meta property="og:description" content="当前shim有shimV1和shimV2两种实现架构，shimV1作为传统shim的实现方案，主要被用作容器引擎和runtime的中间层，实现io、signals等的转发；最新版本的shimV2，在shimV1的基础上集成了runtime的功能，缩短了容器创建的调用链， 在某些场景能够有效降低底噪开销。在本文中的shimV2 默认使用的是containerd-shim-kata-v2，以此为分析对">
 <meta property="og:locale" content="en_US">
+<meta property="og:image" content="http://gaohuatao-1.github.io/2021/09/06/isulad-shimv1-shimv2-diff/2021-04-09-isulad-shimv2-arch-1.png">
+<meta property="og:image" content="http://gaohuatao-1.github.io/2021/09/06/isulad-shimv1-shimv2-diff/2021-04-09-isulad-shimv2-shimv2-differences.png">
+<meta property="article:published_time" content="2021-09-06T01:52:03.000Z">
+<meta property="article:modified_time" content="2021-09-06T02:01:40.380Z">
 <meta property="article:author" content="Gao Huatao">
-<meta property="article:tag" content="Golang, C, Rust, Linux, Container, K8s">
+<meta property="article:tag" content="kata, shimv2">
 <meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="http://gaohuatao-1.github.io/2021/09/06/isulad-shimv1-shimv2-diff/2021-04-09-isulad-shimv2-arch-1.png">
   
     <link rel="alternative" href="/atom.xml" title="高华涛的博客" type="application/atom+xml">
   
@@ -153,60 +158,252 @@
             <canvas data-colors="#eaeaea" data-sectionHeight="100" data-contentId="js-content" id="myCanvas1" class="anm-canvas"></canvas>
           </div>
           <div id="js-content" class="content-ll">
-            
-  
-  
+            <article id="post-isulad-shimv1-shimv2-diff" class="article article-type-post " itemscope itemprop="blogPost">
+  <div class="article-inner">
     
-    
-      
-      
-      <section class="archives-wrap">
-        <div class="archive-year-wrap">
-          <a href="/archives/2021" class="archive-year">2021</a>
-        </div>
-        <div class="archives">
-    
-    <article class="archive-article archive-type-post">
-  <div class="archive-article-inner">
-    <header class="archive-article-header">
-      	<div class="article-meta">
-	      	<a href="/2021/09/04/isula-shimv2-stratovirt/" class="archive-article-date">
-  	<time datetime="2021-09-04T09:57:53.000Z" itemprop="datePublished"><i class="icon-calendar icon"></i>2021-09-04</time>
-</a>
-        </div>
-    	 
+      <header class="article-header">
+        
   
-    <h1 itemprop="name">
-      <a class="archive-article-title" href="/2021/09/04/isula-shimv2-stratovirt/">iSula对接shim v2安全容器</a>
+    <h1 class="article-title" itemprop="name">
+      kata shimV2中监控容器退出机制的实现方案分析
     </h1>
   
 
-        <div class="article-info info-on-right">
-          
+        
+        <a href="/2021/09/06/isulad-shimv1-shimv2-diff/" class="archive-article-date">
+  	<time datetime="2021-09-06T01:52:03.000Z" itemprop="datePublished"><i class="icon-calendar icon"></i>2021-09-06</time>
+</a>
+        
+      </header>
+    
+    <div class="article-entry" itemprop="articleBody">
+      
+        <p>当前shim有shimV1和shimV2两种实现架构，shimV1作为传统shim的实现方案，主要被用作容器引擎和runtime的中间层，实现io、signals等的转发；最新版本的shimV2，在shimV1的基础上集成了runtime的功能，缩短了容器创建的调用链， 在某些场景能够有效降低底噪开销。在本文中的shimV2 默认使用的是<a target="_blank" rel="noopener" href="https://github.com/kata-containers/runtime/tree/master/containerd-shim-v2">containerd-shim-kata-v2</a>，以此为分析对象，分别分析了iSulad和containerd中对pause和container(业务容器）两种类型的容器退出监控流程的实现方式。</p>
+<h3 id="shimV2介绍"><a href="#shimV2介绍" class="headerlink" title="shimV2介绍"></a>shimV2介绍</h3><p>在shimV1架构中，安全容器的启动涉及kata-shim、 kata-runtime、  kata-proxy、kata-agent组件以及用于创建虚机的qemu组件。在shimV2架构中，将shim、proxy和runtime集成到一个二进制中，当启动pause容器和在pause中启动业务容器时，host os中只存在一个containerd-shim-kata-v2进程和qemu-kvm进程，也就是说pause容器和其中的业务容器共用同一个containerd-shim-kata-v2进程和虚拟机。<a target="_blank" rel="noopener" href="https://github.com/kata-containers/documentation/blob/master/design/architecture.md">shimV2和shimV1架构对比</a>如下。shimV1在单pause+多业务容器场景，每启动一个pause或者业务容器都有一个containerd-shim或者isulad-shim、kata-shim进程被拉起，pause和其中的业务容器共用kata-proxy(非vsock)进程和虚机进程（2N+1）。然而， shimV2在单pause+多业务容器场景中，host os中只有一个containerd-shim-kata-v2进程和qemu-kvm进程，调用链更短， 总体底噪更低，特别是当pause中业务容器数量增加时，低底噪优势将更加明显。</p>
+<img src="/2021/09/06/isulad-shimv1-shimv2-diff/2021-04-09-isulad-shimv2-arch-1.png" class="" title="iSulad">
+
+<h3 id="iSulad与shimV1和shimV2关系"><a href="#iSulad与shimV1和shimV2关系" class="headerlink" title="iSulad与shimV1和shimV2关系"></a>iSulad与shimV1和shimV2关系</h3><ul>
+<li>iSulad中shimv1的实现</li>
+</ul>
+<p>isulad-shim组件作为iSulad中shimv1的实现方案，代码在iSulad仓库中，随iSulad一起编译安装；可用于对接不同的OCI Runtime， 如runc、kata-runtime.</p>
+<ul>
+<li>iSulad中shimv2的实现</li>
+</ul>
+<p>当前iSulad对接shimv2仍处于调试阶段，shimV2分为containerd-shim-kata-v2和containerd-shim-runc-v2两种实现，本文以containerd-shim-kata-v2作为对象，分析在shimv2场景下，安全容器的退出监控实现机制。</p>
+<ul>
+<li>shimv1和shimv2的区别如下图所示</li>
+</ul>
+<img src="/2021/09/06/isulad-shimv1-shimv2-diff/2021-04-09-isulad-shimv2-shimv2-differences.png" class="" title="iSulad">
+
+
+<h3 id="iSulad中容器退出监控剖析"><a href="#iSulad中容器退出监控剖析" class="headerlink" title="iSulad中容器退出监控剖析"></a>iSulad中容器退出监控剖析</h3><p>以isulad-shim为例，iSulad中通过epoll机制监控每个isulad-shim进程中开启的exit_fifo fd是否关闭，isulad-shim在监控到容器退出后将其退出码写入此fifo， 在iSulad中读取并设置容器退出状态，业务容器和pause容器均会打开一个exit_fifo fd。对于pause容器和业务容器这两种CRI流程的容器会分别拉起独立的isulad-shim进程。</p>
+<p>iSulad  | &lt;==&gt; isulad-shim &lt;==&gt; container init</p>
+<p>iSulad  | &lt;==&gt; isulad-shim &lt;==&gt; pause init</p>
+<p>iSulad中在start 容器流程中开启exit_fifo的读端fd并加入epoll监控， 关键代码如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">do_start_container</span><span class="params">(<span class="keyword">container_t</span> *cont, <span class="keyword">const</span> <span class="keyword">char</span> *console_fifos[], <span class="keyword">bool</span> reset_rm, <span class="keyword">pid_ppid_info_t</span> *pid_info)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    runtime_start();</span><br><span class="line">    do_post_start_on_success() &#123;</span><br><span class="line">        container_supervisor_add_exit_monitor() &#123;</span><br><span class="line">            supervisor_handler_lock();</span><br><span class="line">    	    epoll_loop_add_handler();</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+
+
+<h3 id="containerd中容器退出监控"><a href="#containerd中容器退出监控" class="headerlink" title="containerd中容器退出监控"></a>containerd中容器退出监控</h3><p>containerd在启动容器并监控其退出状态时不再使用fifo来实现而是使用rpc调用中的Wait方法， 启动pause容器、业务容器以及调用容器exec命令时，均会在containerd中开启一个协程来获取其退出状态。containerd重启后，connect方法实现将全部容器的wait方法进行重建。</p>
+<ul>
+<li>start sandbox和start container监控流程</li>
+</ul>
+<p>代码文件：containerd/vendor/github.com/containerd/cri/pkg/server/events.go</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// eventMonitor monitors containerd event and updates internal state correspondingly.</span></span><br><span class="line"><span class="comment">// TODO(random-liu): Handle event for each container in a separate goroutine.</span></span><br><span class="line"><span class="keyword">type</span> eventMonitor <span class="keyword">struct</span> &#123;</span><br><span class="line">	c  *criService</span><br><span class="line">	ch &lt;-<span class="keyword">chan</span> *events.Envelope</span><br><span class="line">	<span class="comment">// exitCh receives container/sandbox exit events from exit monitors.</span></span><br><span class="line">	exitCh  <span class="keyword">chan</span> *eventtypes.TaskExit</span><br><span class="line">	errCh   &lt;-<span class="keyword">chan</span> error</span><br><span class="line">	ctx     context.Context</span><br><span class="line">	cancel  context.CancelFunc</span><br><span class="line">	backOff *backOff</span><br><span class="line">&#125;</span><br><span class="line"><span class="comment">// container 监控退出</span></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(c *criService)</span> <span class="title">StartContainer</span><span class="params">(ctx context.Context, r *runtime.StartContainerRequest)</span> <span class="params">(retRes *runtime.StartContainerResponse, retErr error)</span></span> &#123;</span><br><span class="line">    <span class="comment">// wait is a long running background request, no timeout needed. //ght container这里监听</span></span><br><span class="line">	exitCh, err := task.Wait(ctrdutil.NamespacedContext())</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// start the monitor after updating container state, this ensures that</span></span><br><span class="line">	<span class="comment">// event monitor receives the TaskExit event and update container state</span></span><br><span class="line">	<span class="comment">// after this.</span></span><br><span class="line">	c.eventMonitor.startExitMonitor(context.Background(), id, task.Pid(), exitCh)</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// RunPodSandbox creates and starts a pod-level sandbox. Runtimes should ensure</span></span><br><span class="line"><span class="comment">// the sandbox is in ready state.</span></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(c *criService)</span> <span class="title">RunPodSandbox</span><span class="params">(ctx context.Context, r *runtime.RunPodSandboxRequest)</span> <span class="params">(_ *runtime.RunPodSandboxResponse, retErr error)</span></span> &#123;</span><br><span class="line">    <span class="comment">// wait is a long running background request, no timeout needed.</span></span><br><span class="line">	exitCh, err := task.Wait(ctrdutil.NamespacedContext())</span><br><span class="line">    <span class="comment">// start the monitor after adding sandbox into the store, this ensures</span></span><br><span class="line">	<span class="comment">// that sandbox is in the store, when event monitor receives the TaskExit event.</span></span><br><span class="line">	<span class="comment">//</span></span><br><span class="line">	<span class="comment">// TaskOOM from containerd may come before sandbox is added to store,</span></span><br><span class="line">	<span class="comment">// but we don&#x27;t care about sandbox TaskOOM right now, so it is fine.</span></span><br><span class="line">	c.eventMonitor.startExitMonitor(context.Background(), id, task.Pid(), exitCh)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>containerd/process.go</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// containerd/process.go 监控container exec等进程退出</span></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(p *process)</span> <span class="title">Wait</span><span class="params">(ctx context.Context)</span> <span class="params">(&lt;-<span class="keyword">chan</span> ExitStatus, error)</span></span> &#123;</span><br><span class="line">	c := <span class="built_in">make</span>(<span class="keyword">chan</span> ExitStatus, <span class="number">1</span>)</span><br><span class="line">	<span class="keyword">go</span> <span class="function"><span class="keyword">func</span><span class="params">()</span></span> &#123;</span><br><span class="line">		<span class="keyword">defer</span> <span class="built_in">close</span>(c)</span><br><span class="line">		r, err := p.task.client.TaskService().Wait(ctx, &amp;tasks.WaitRequest&#123;</span><br><span class="line">			ContainerID: p.task.id,</span><br><span class="line">			ExecID:      p.id,</span><br><span class="line">		&#125;)</span><br><span class="line">		<span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">			c &lt;- ExitStatus&#123;</span><br><span class="line">				code: UnknownExitStatus,</span><br><span class="line">				err:  err,</span><br><span class="line">			&#125;</span><br><span class="line">			<span class="keyword">return</span></span><br><span class="line">		&#125;</span><br><span class="line">		c &lt;- ExitStatus&#123;</span><br><span class="line">			code:     r.ExitStatus,</span><br><span class="line">			exitedAt: r.ExitedAt,</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;()</span><br><span class="line">	<span class="keyword">return</span> c, <span class="literal">nil</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<ul>
+<li>containerd重新获取shim pid，与shimV1不同的是这里的shim pid并不是作为容器的ppid， 因此在容器进程无法正常kill时，不能通过kill shim pid来强制容器退出。</li>
+</ul>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(m *TaskManager)</span> <span class="title">loadTasks</span><span class="params">(ctx context.Context)</span> <span class="title">error</span></span> &#123;&#125;</span><br><span class="line">  <span class="function"><span class="keyword">func</span> <span class="title">loadShim</span><span class="params">()</span></span> </span><br><span class="line">	<span class="function"><span class="keyword">func</span> <span class="params">(s *shim)</span> <span class="title">Connect</span><span class="params">(ctx context.Context)</span> <span class="title">error</span></span> &#123;</span><br><span class="line">	response, err := s.task.Connect(ctx, &amp;task.ConnectRequest&#123;</span><br><span class="line">		ID: s.ID(),</span><br><span class="line">	&#125;)</span><br><span class="line">	<span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">		<span class="keyword">return</span> err</span><br><span class="line">	&#125;</span><br><span class="line">	s.taskPid = <span class="keyword">int</span>(response.TaskPid) <span class="comment">// 获取shim的pid</span></span><br><span class="line">	<span class="keyword">return</span> <span class="literal">nil</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+
+
+
+<h3 id="containerd-kata-shim-v2代码分析"><a href="#containerd-kata-shim-v2代码分析" class="headerlink" title="containerd-kata-shim-v2代码分析"></a>containerd-kata-shim-v2代码分析</h3><ol>
+<li>ttrpc 服务端入口：</li>
+</ol>
+<p>文件containerd-shim-v2/service.go中定义了containerd-kata-shim-v2作为ttrpc服务端监听来自容器引擎的ttrpc调用的入口函数并实现了容器退出状态的监控、io和信号转发等操作。</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// service is the shim implementation of a remote shim over GRPC</span></span><br><span class="line"><span class="keyword">type</span> service <span class="keyword">struct</span> &#123;</span><br><span class="line">	mu          sync.Mutex</span><br><span class="line">	eventSendMu sync.Mutex</span><br><span class="line"></span><br><span class="line">	<span class="comment">// pid Since this shimv2 cannot get the container processes pid from VM,</span></span><br><span class="line">	<span class="comment">// thus for the returned values needed pid, just return this shim&#x27;s</span></span><br><span class="line">	<span class="comment">// pid directly.</span></span><br><span class="line">	pid <span class="keyword">uint32</span></span><br><span class="line"></span><br><span class="line">	ctx        context.Context</span><br><span class="line">	sandbox    vc.VCSandbox</span><br><span class="line">	containers <span class="keyword">map</span>[<span class="keyword">string</span>]*container <span class="comment">// pause和container容器全部保存在这里</span></span><br><span class="line">	config     *oci.RuntimeConfig</span><br><span class="line">	events     <span class="keyword">chan</span> <span class="keyword">interface</span>&#123;&#125;<span class="comment">// publish使用 128缓冲</span></span><br><span class="line">	monitor    <span class="keyword">chan</span> error <span class="comment">// 监控sandbox即虚机的状态</span></span><br><span class="line"></span><br><span class="line">	cancel <span class="function"><span class="keyword">func</span><span class="params">()</span> // <span class="title">ctx</span> <span class="title">cancel</span></span></span><br><span class="line"></span><br><span class="line">	ec <span class="keyword">chan</span> exit <span class="comment">// 保存了容器推出码 pid等信息， 32缓冲， shim中协程检查进程写入events，向上publish</span></span><br><span class="line">	id <span class="keyword">string</span><span class="comment">// io.containerd.kata.v2</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<ul>
+<li>service 实现了ttrpc server和shim管理的接口</li>
+</ul>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">type</span> TaskService <span class="keyword">interface</span> &#123;</span><br><span class="line">	State(ctx context.Context, req *StateRequest) (*StateResponse, error)</span><br><span class="line">	Create(ctx context.Context, req *CreateTaskRequest) (*CreateTaskResponse, error)</span><br><span class="line">	Start(ctx context.Context, req *StartRequest) (*StartResponse, error)</span><br><span class="line">	Delete(ctx context.Context, req *DeleteRequest) (*DeleteResponse, error)</span><br><span class="line">	Pids(ctx context.Context, req *PidsRequest) (*PidsResponse, error)</span><br><span class="line">	Pause(ctx context.Context, req *PauseRequest) (*google_protobuf1.Empty, error)</span><br><span class="line">	Resume(ctx context.Context, req *ResumeRequest) (*google_protobuf1.Empty, error)</span><br><span class="line">	Checkpoint(ctx context.Context, req *CheckpointTaskRequest) (*google_protobuf1.Empty, error)</span><br><span class="line">	Kill(ctx context.Context, req *KillRequest) (*google_protobuf1.Empty, error)</span><br><span class="line">	Exec(ctx context.Context, req *ExecProcessRequest) (*google_protobuf1.Empty, error)</span><br><span class="line">	ResizePty(ctx context.Context, req *ResizePtyRequest) (*google_protobuf1.Empty, error)</span><br><span class="line">	CloseIO(ctx context.Context, req *CloseIORequest) (*google_protobuf1.Empty, error)</span><br><span class="line">	Update(ctx context.Context, req *UpdateTaskRequest) (*google_protobuf1.Empty, error)</span><br><span class="line">    <span class="comment">// 获取容器退出状态</span></span><br><span class="line">	Wait(ctx context.Context, req *WaitRequest) (*WaitResponse, error)</span><br><span class="line">	Stats(ctx context.Context, req *StatsRequest) (*StatsResponse, error)</span><br><span class="line">    <span class="comment">// 获取shim pid</span></span><br><span class="line">	Connect(ctx context.Context, req *ConnectRequest) (*ConnectResponse, error)</span><br><span class="line">    <span class="comment">// 取消全部context子任务并停止containerd-shim-kata-v2进程</span></span><br><span class="line">	Shutdown(ctx context.Context, req *ShutdownRequest) (*google_protobuf1.Empty, error)</span><br><span class="line">&#125;</span><br><span class="line"><span class="comment">// Shim server interface</span></span><br><span class="line"><span class="keyword">type</span> Shim <span class="keyword">interface</span> &#123;</span><br><span class="line">	shimapi.TaskService</span><br><span class="line">	Cleanup(ctx context.Context) (*shimapi.DeleteResponse, error)</span><br><span class="line">	StartShim(ctx context.Context, id, containerdBinary, containerdAddress <span class="keyword">string</span>) (<span class="keyword">string</span>, error)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+
+
+<h3 id="iSulad通过containerd-shim-kata-v2运行容器"><a href="#iSulad通过containerd-shim-kata-v2运行容器" class="headerlink" title="iSulad通过containerd-shim-kata-v2运行容器"></a>iSulad通过containerd-shim-kata-v2运行容器</h3><ul>
+<li>启动pause容器。</li>
+</ul>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">isula run -tid --runtime io.containerd.kata.v2 --network none --annotation io.kubernetes.docker.type=podsandbox &lt;pause-image&gt; &lt;<span class="built_in">command</span>&gt;</span><br></pre></td></tr></table></figure>
+
+<p>此处获取pod的sandbox-id。</p>
+<ul>
+<li>创建业务容器并加入到这个pod中</li>
+</ul>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">isula run -tid --runtime io.containerd.kata.v2 --network none --annotation io.kubernetes.docker.type=container --annotation io.kubernetes.sandbox.id=&lt;sandbox-id&gt; busybox &lt;<span class="built_in">command</span>&gt;</span><br></pre></td></tr></table></figure>
+
+
+
+<h3 id="containerd通过containerd-shim-kata-v2运行容器"><a href="#containerd通过containerd-shim-kata-v2运行容器" class="headerlink" title="containerd通过containerd-shim-kata-v2运行容器"></a>containerd通过containerd-shim-kata-v2运行容器</h3><p>自行安装cri-tools工具，本文使用github.com上master分支编译安装。</p>
+<ul>
+<li>containerd配置：</li>
+</ul>
+<p>containerd配置文件/etc/containerd/config.toml中增加如下一段用来配置kata参数</p>
+<figure class="highlight toml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="section">[plugins.&quot;io.containerd.grpc.v1.cri&quot;.containerd.runtimes]</span></span><br><span class="line">//</span><br><span class="line">        <span class="section">[plugins.&quot;io.containerd.grpc.v1.cri&quot;.containerd.runtimes.kata]</span></span><br><span class="line">          <span class="attr">runtime_type</span> = <span class="string">&quot;io.containerd.kata.v2&quot;</span></span><br><span class="line">          <span class="attr">pod_annotations</span> = [<span class="string">&quot;com.github.containers.virtcontainers.sandbox_cpu&quot;</span>, <span class="string">&quot;com.github.containers.virtcontainers.sandbox_mem&quot;</span>, <span class="string">&quot;com.github.containers.virtcontainers.static_devices&quot;</span>, <span class="string">&quot;com.github.containers.virtcontainers.sandbox_drivers&quot;</span>, <span class="string">&quot;com.github.containers.virtcontainers.boot_cgroup&quot;</span>]</span><br><span class="line">          <span class="attr">container_annotations</span> = [<span class="string">&quot;com.github.containers.virtcontainers.storage_spec&quot;</span>]</span><br><span class="line">//</span><br><span class="line">        <span class="section">[plugins.&quot;io.containerd.grpc.v1.cri&quot;.containerd.runtimes.runc]</span></span><br><span class="line">          <span class="attr">base_runtime_spec</span> = <span class="string">&quot;&quot;</span></span><br><span class="line"></span><br></pre></td></tr></table></figure>
+
+<ul>
+<li>安装cni插件：</li>
+</ul>
+<p>参考如下教程，自行编译plugins</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">https://github.com/containerd/containerd/blob/master/script/setup/install-cni</span><br></pre></td></tr></table></figure>
+
+<ul>
+<li>指定runtime运行pod:</li>
+</ul>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line">$ crictl -i unix:///var/run/containerd/containerd.sock -r unix:///var/run/containerd/containerd.sock runp --runtime kata sandbox-config.json</span><br><span class="line">$ cat sandbox-config.json</span><br><span class="line">&#123;</span><br><span class="line">    <span class="string">&quot;metadata&quot;</span>: &#123;</span><br><span class="line">            <span class="string">&quot;name&quot;</span>: <span class="string">&quot;nginx-sandbox&quot;</span>,</span><br><span class="line">            <span class="string">&quot;namespace&quot;</span>: <span class="string">&quot;default&quot;</span>,</span><br><span class="line">            <span class="string">&quot;attempt&quot;</span>: 1,</span><br><span class="line">            <span class="string">&quot;uid&quot;</span>: <span class="string">&quot;hdishd83djaidwnduwk28bcsb&quot;</span></span><br><span class="line">        &#125;,</span><br><span class="line">    <span class="string">&quot;image&quot;</span>: &#123;</span><br><span class="line">        <span class="string">&quot;image&quot;</span>: <span class="string">&quot;docker.io/library/busybox:latest&quot;</span></span><br><span class="line">    &#125;,</span><br><span class="line">    <span class="string">&quot;linux&quot;</span>: &#123;</span><br><span class="line">        &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+
+      
+
+      
+        <div class="page-reward">
+          <a href="javascript:;" class="page-reward-btn tooltip-top">
+            <div class="tooltip tooltip-east">
+            <span class="tooltip-item">
+              赏
+            </span>
+            <span class="tooltip-content">
+              <span class="tooltip-text">
+                <span class="tooltip-inner">
+                  <p class="reward-p"><i class="icon icon-quo-left"></i>谢谢你请我吃糖果<i class="icon icon-quo-right"></i></p>
+                  <div class="reward-box">
+                    
+                    
+                  </div>
+                </span>
+              </span>
+            </span>
+          </div>
+          </a>
+        </div>
+      
+    </div>
+    <div class="article-info article-info-index">
+      
+      
 	<div class="article-tag tagcloud">
 		<i class="icon-price-tags icon"></i>
 		<ul class="article-tag-list">
 			 
         		<li class="article-tag-list-item">
-        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color2">iSulad,kata</a>
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color3">kata, shimv2</a>
         		</li>
       		
 		</ul>
 	</div>
 
-          
+      
 
+      
+
+      
+        
+<div class="share-btn share-icons tooltip-left">
+  <div class="tooltip tooltip-east">
+    <span class="tooltip-item">
+      <a href="javascript:;" class="share-sns share-outer">
+        <i class="icon icon-share"></i>
+      </a>
+    </span>
+    <span class="tooltip-content">
+      <div class="share-wrap">
+        <div class="share-icons">
+          <a class="weibo share-sns" href="javascript:;" data-type="weibo">
+            <i class="icon icon-weibo"></i>
+          </a>
+          <a class="weixin share-sns wxFab" href="javascript:;" data-type="weixin">
+            <i class="icon icon-weixin"></i>
+          </a>
+          <a class="qq share-sns" href="javascript:;" data-type="qq">
+            <i class="icon icon-qq"></i>
+          </a>
+          <a class="douban share-sns" href="javascript:;" data-type="douban">
+            <i class="icon icon-douban"></i>
+          </a>
+          <a class="qzone share-sns" href="javascript:;" data-type="qzone">
+            <i class="icon icon-qzone"></i>
+          </a>
+          <a class="facebook share-sns" href="javascript:;" data-type="facebook">
+            <i class="icon icon-facebook"></i>
+          </a>
+          <a class="twitter share-sns" href="javascript:;" data-type="twitter">
+            <i class="icon icon-twitter"></i>
+          </a>
+          <a class="google share-sns" href="javascript:;" data-type="google">
+            <i class="icon icon-google"></i>
+          </a>
         </div>
-        <div class="clearfix"></div>
-    </header>
+      </div>
+    </span>
+  </div>
+</div>
+
+<div class="page-modal wx-share js-wx-box">
+    <a class="close js-modal-close" href="javascript:;"><i class="icon icon-close"></i></a>
+    <p>扫一扫，分享到微信</p>
+    <div class="wx-qrcode">
+      <img src="//pan.baidu.com/share/qrcode?url=http://gaohuatao-1.github.io/2021/09/06/isulad-shimv1-shimv2-diff/" alt="微信分享二维码">
+    </div>
+</div>
+
+<div class="mask js-mask"></div>
+      
+      <div class="clearfix"></div>
+    </div>
   </div>
 </article>
+
+  
+<nav id="article-nav">
   
   
-    </div></section>
+    <a href="/2021/09/04/isula-shimv2-stratovirt/" id="article-nav-older" class="article-nav-link-wrap">
+      <div class="article-nav-title">iSula对接shim v2安全容器</div>
+      <i class="icon-circle-right"></i>
+    </a>
+  
+</nav>
+
+
+<aside class="wrap-side-operation">
+    <div class="mod-side-operation">
+        
+        <div class="jump-container" id="js-jump-container" style="display:none;">
+            <a href="javascript:void(0)" class="mod-side-operation__jump-to-top">
+                <i class="icon-font icon-back"></i>
+            </a>
+            <div id="js-jump-plan-container" class="jump-plan-container" style="top: -11px;">
+                <i class="icon-font icon-plane jump-plane"></i>
+            </div>
+        </div>
+        
+        
+    </div>
+</aside>
+
+
+
+  
+  
   
 
-    
+  
+
+  
+
+  
 
 
           </div>
@@ -229,9 +426,9 @@
 	var yiliaConfig = {
 		mathjax: false,
 		isHome: false,
-		isPost: false,
+		isPost: true,
 		isArchive: false,
-		isTag: true,
+		isTag: false,
 		isCategory: false,
 		open_in_new: false,
 		toc_hide_index: true,

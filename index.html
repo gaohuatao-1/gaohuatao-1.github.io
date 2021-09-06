@@ -155,6 +155,165 @@
           <div id="js-content" class="content-ll">
             
   
+    <article id="post-isulad-shimv1-shimv2-diff" class="article article-type-post  article-index" itemscope itemprop="blogPost">
+  <div class="article-inner">
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="article-title" href="/2021/09/06/isulad-shimv1-shimv2-diff/">kata shimV2中监控容器退出机制的实现方案分析</a>
+    </h1>
+  
+
+        
+        <a href="/2021/09/06/isulad-shimv1-shimv2-diff/" class="archive-article-date">
+  	<time datetime="2021-09-06T01:52:03.000Z" itemprop="datePublished"><i class="icon-calendar icon"></i>2021-09-06</time>
+</a>
+        
+      </header>
+    
+    <div class="article-entry" itemprop="articleBody">
+      
+        <p>当前shim有shimV1和shimV2两种实现架构，shimV1作为传统shim的实现方案，主要被用作容器引擎和runtime的中间层，实现io、signals等的转发；最新版本的shimV2，在shimV1的基础上集成了runtime的功能，缩短了容器创建的调用链， 在某些场景能够有效降低底噪开销。在本文中的shimV2 默认使用的是<a target="_blank" rel="noopener" href="https://github.com/kata-containers/runtime/tree/master/containerd-shim-v2">containerd-shim-kata-v2</a>，以此为分析对象，分别分析了iSulad和containerd中对pause和container(业务容器）两种类型的容器退出监控流程的实现方式。</p>
+<h3 id="shimV2介绍"><a href="#shimV2介绍" class="headerlink" title="shimV2介绍"></a>shimV2介绍</h3><p>在shimV1架构中，安全容器的启动涉及kata-shim、 kata-runtime、  kata-proxy、kata-agent组件以及用于创建虚机的qemu组件。在shimV2架构中，将shim、proxy和runtime集成到一个二进制中，当启动pause容器和在pause中启动业务容器时，host os中只存在一个containerd-shim-kata-v2进程和qemu-kvm进程，也就是说pause容器和其中的业务容器共用同一个containerd-shim-kata-v2进程和虚拟机。<a target="_blank" rel="noopener" href="https://github.com/kata-containers/documentation/blob/master/design/architecture.md">shimV2和shimV1架构对比</a>如下。shimV1在单pause+多业务容器场景，每启动一个pause或者业务容器都有一个containerd-shim或者isulad-shim、kata-shim进程被拉起，pause和其中的业务容器共用kata-proxy(非vsock)进程和虚机进程（2N+1）。然而， shimV2在单pause+多业务容器场景中，host os中只有一个containerd-shim-kata-v2进程和qemu-kvm进程，调用链更短， 总体底噪更低，特别是当pause中业务容器数量增加时，低底噪优势将更加明显。</p>
+<img src="/2021/09/06/isulad-shimv1-shimv2-diff/2021-04-09-isulad-shimv2-arch-1.png" class="" title="iSulad">
+
+<h3 id="iSulad与shimV1和shimV2关系"><a href="#iSulad与shimV1和shimV2关系" class="headerlink" title="iSulad与shimV1和shimV2关系"></a>iSulad与shimV1和shimV2关系</h3><ul>
+<li>iSulad中shimv1的实现</li>
+</ul>
+<p>isulad-shim组件作为iSulad中shimv1的实现方案，代码在iSulad仓库中，随iSulad一起编译安装；可用于对接不同的OCI Runtime， 如runc、kata-runtime.</p>
+<ul>
+<li>iSulad中shimv2的实现</li>
+</ul>
+<p>当前iSulad对接shimv2仍处于调试阶段，shimV2分为containerd-shim-kata-v2和containerd-shim-runc-v2两种实现，本文以containerd-shim-kata-v2作为对象，分析在shimv2场景下，安全容器的退出监控实现机制。</p>
+<ul>
+<li>shimv1和shimv2的区别如下图所示</li>
+</ul>
+<img src="/2021/09/06/isulad-shimv1-shimv2-diff/2021-04-09-isulad-shimv2-shimv2-differences.png" class="" title="iSulad">
+
+
+<h3 id="iSulad中容器退出监控剖析"><a href="#iSulad中容器退出监控剖析" class="headerlink" title="iSulad中容器退出监控剖析"></a>iSulad中容器退出监控剖析</h3><p>以isulad-shim为例，iSulad中通过epoll机制监控每个isulad-shim进程中开启的exit_fifo fd是否关闭，isulad-shim在监控到容器退出后将其退出码写入此fifo， 在iSulad中读取并设置容器退出状态，业务容器和pause容器均会打开一个exit_fifo fd。对于pause容器和业务容器这两种CRI流程的容器会分别拉起独立的isulad-shim进程。</p>
+<p>iSulad  | &lt;==&gt; isulad-shim &lt;==&gt; container init</p>
+<p>iSulad  | &lt;==&gt; isulad-shim &lt;==&gt; pause init</p>
+<p>iSulad中在start 容器流程中开启exit_fifo的读端fd并加入epoll监控， 关键代码如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">do_start_container</span><span class="params">(<span class="keyword">container_t</span> *cont, <span class="keyword">const</span> <span class="keyword">char</span> *console_fifos[], <span class="keyword">bool</span> reset_rm, <span class="keyword">pid_ppid_info_t</span> *pid_info)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">    runtime_start();</span><br><span class="line">    do_post_start_on_success() &#123;</span><br><span class="line">        container_supervisor_add_exit_monitor() &#123;</span><br><span class="line">            supervisor_handler_lock();</span><br><span class="line">    	    epoll_loop_add_handler();</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+
+
+<h3 id="containerd中容器退出监控"><a href="#containerd中容器退出监控" class="headerlink" title="containerd中容器退出监控"></a>containerd中容器退出监控</h3><p>containerd在启动容器并监控其退出状态时不再使用fifo来实现而是使用rpc调用中的Wait方法， 启动pause容器、业务容器以及调用容器exec命令时，均会在containerd中开启一个协程来获取其退出状态。containerd重启后，connect方法实现将全部容器的wait方法进行重建。</p>
+<ul>
+<li>start sandbox和start container监控流程</li>
+</ul>
+<p>代码文件：containerd/vendor/github.com/containerd/cri/pkg/server/events.go</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// eventMonitor monitors containerd event and updates internal state correspondingly.</span></span><br><span class="line"><span class="comment">// TODO(random-liu): Handle event for each container in a separate goroutine.</span></span><br><span class="line"><span class="keyword">type</span> eventMonitor <span class="keyword">struct</span> &#123;</span><br><span class="line">	c  *criService</span><br><span class="line">	ch &lt;-<span class="keyword">chan</span> *events.Envelope</span><br><span class="line">	<span class="comment">// exitCh receives container/sandbox exit events from exit monitors.</span></span><br><span class="line">	exitCh  <span class="keyword">chan</span> *eventtypes.TaskExit</span><br><span class="line">	errCh   &lt;-<span class="keyword">chan</span> error</span><br><span class="line">	ctx     context.Context</span><br><span class="line">	cancel  context.CancelFunc</span><br><span class="line">	backOff *backOff</span><br><span class="line">&#125;</span><br><span class="line"><span class="comment">// container 监控退出</span></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(c *criService)</span> <span class="title">StartContainer</span><span class="params">(ctx context.Context, r *runtime.StartContainerRequest)</span> <span class="params">(retRes *runtime.StartContainerResponse, retErr error)</span></span> &#123;</span><br><span class="line">    <span class="comment">// wait is a long running background request, no timeout needed. //ght container这里监听</span></span><br><span class="line">	exitCh, err := task.Wait(ctrdutil.NamespacedContext())</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// start the monitor after updating container state, this ensures that</span></span><br><span class="line">	<span class="comment">// event monitor receives the TaskExit event and update container state</span></span><br><span class="line">	<span class="comment">// after this.</span></span><br><span class="line">	c.eventMonitor.startExitMonitor(context.Background(), id, task.Pid(), exitCh)</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">// RunPodSandbox creates and starts a pod-level sandbox. Runtimes should ensure</span></span><br><span class="line"><span class="comment">// the sandbox is in ready state.</span></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(c *criService)</span> <span class="title">RunPodSandbox</span><span class="params">(ctx context.Context, r *runtime.RunPodSandboxRequest)</span> <span class="params">(_ *runtime.RunPodSandboxResponse, retErr error)</span></span> &#123;</span><br><span class="line">    <span class="comment">// wait is a long running background request, no timeout needed.</span></span><br><span class="line">	exitCh, err := task.Wait(ctrdutil.NamespacedContext())</span><br><span class="line">    <span class="comment">// start the monitor after adding sandbox into the store, this ensures</span></span><br><span class="line">	<span class="comment">// that sandbox is in the store, when event monitor receives the TaskExit event.</span></span><br><span class="line">	<span class="comment">//</span></span><br><span class="line">	<span class="comment">// TaskOOM from containerd may come before sandbox is added to store,</span></span><br><span class="line">	<span class="comment">// but we don&#x27;t care about sandbox TaskOOM right now, so it is fine.</span></span><br><span class="line">	c.eventMonitor.startExitMonitor(context.Background(), id, task.Pid(), exitCh)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>containerd/process.go</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// containerd/process.go 监控container exec等进程退出</span></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(p *process)</span> <span class="title">Wait</span><span class="params">(ctx context.Context)</span> <span class="params">(&lt;-<span class="keyword">chan</span> ExitStatus, error)</span></span> &#123;</span><br><span class="line">	c := <span class="built_in">make</span>(<span class="keyword">chan</span> ExitStatus, <span class="number">1</span>)</span><br><span class="line">	<span class="keyword">go</span> <span class="function"><span class="keyword">func</span><span class="params">()</span></span> &#123;</span><br><span class="line">		<span class="keyword">defer</span> <span class="built_in">close</span>(c)</span><br><span class="line">		r, err := p.task.client.TaskService().Wait(ctx, &amp;tasks.WaitRequest&#123;</span><br><span class="line">			ContainerID: p.task.id,</span><br><span class="line">			ExecID:      p.id,</span><br><span class="line">		&#125;)</span><br><span class="line">		<span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">			c &lt;- ExitStatus&#123;</span><br><span class="line">				code: UnknownExitStatus,</span><br><span class="line">				err:  err,</span><br><span class="line">			&#125;</span><br><span class="line">			<span class="keyword">return</span></span><br><span class="line">		&#125;</span><br><span class="line">		c &lt;- ExitStatus&#123;</span><br><span class="line">			code:     r.ExitStatus,</span><br><span class="line">			exitedAt: r.ExitedAt,</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;()</span><br><span class="line">	<span class="keyword">return</span> c, <span class="literal">nil</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<ul>
+<li>containerd重新获取shim pid，与shimV1不同的是这里的shim pid并不是作为容器的ppid， 因此在容器进程无法正常kill时，不能通过kill shim pid来强制容器退出。</li>
+</ul>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(m *TaskManager)</span> <span class="title">loadTasks</span><span class="params">(ctx context.Context)</span> <span class="title">error</span></span> &#123;&#125;</span><br><span class="line">  <span class="function"><span class="keyword">func</span> <span class="title">loadShim</span><span class="params">()</span></span> </span><br><span class="line">	<span class="function"><span class="keyword">func</span> <span class="params">(s *shim)</span> <span class="title">Connect</span><span class="params">(ctx context.Context)</span> <span class="title">error</span></span> &#123;</span><br><span class="line">	response, err := s.task.Connect(ctx, &amp;task.ConnectRequest&#123;</span><br><span class="line">		ID: s.ID(),</span><br><span class="line">	&#125;)</span><br><span class="line">	<span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">		<span class="keyword">return</span> err</span><br><span class="line">	&#125;</span><br><span class="line">	s.taskPid = <span class="keyword">int</span>(response.TaskPid) <span class="comment">// 获取shim的pid</span></span><br><span class="line">	<span class="keyword">return</span> <span class="literal">nil</span></span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+
+
+
+<h3 id="containerd-kata-shim-v2代码分析"><a href="#containerd-kata-shim-v2代码分析" class="headerlink" title="containerd-kata-shim-v2代码分析"></a>containerd-kata-shim-v2代码分析</h3><ol>
+<li>ttrpc 服务端入口：</li>
+</ol>
+<p>文件containerd-shim-v2/service.go中定义了containerd-kata-shim-v2作为ttrpc服务端监听来自容器引擎的ttrpc调用的入口函数并实现了容器退出状态的监控、io和信号转发等操作。</p>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// service is the shim implementation of a remote shim over GRPC</span></span><br><span class="line"><span class="keyword">type</span> service <span class="keyword">struct</span> &#123;</span><br><span class="line">	mu          sync.Mutex</span><br><span class="line">	eventSendMu sync.Mutex</span><br><span class="line"></span><br><span class="line">	<span class="comment">// pid Since this shimv2 cannot get the container processes pid from VM,</span></span><br><span class="line">	<span class="comment">// thus for the returned values needed pid, just return this shim&#x27;s</span></span><br><span class="line">	<span class="comment">// pid directly.</span></span><br><span class="line">	pid <span class="keyword">uint32</span></span><br><span class="line"></span><br><span class="line">	ctx        context.Context</span><br><span class="line">	sandbox    vc.VCSandbox</span><br><span class="line">	containers <span class="keyword">map</span>[<span class="keyword">string</span>]*container <span class="comment">// pause和container容器全部保存在这里</span></span><br><span class="line">	config     *oci.RuntimeConfig</span><br><span class="line">	events     <span class="keyword">chan</span> <span class="keyword">interface</span>&#123;&#125;<span class="comment">// publish使用 128缓冲</span></span><br><span class="line">	monitor    <span class="keyword">chan</span> error <span class="comment">// 监控sandbox即虚机的状态</span></span><br><span class="line"></span><br><span class="line">	cancel <span class="function"><span class="keyword">func</span><span class="params">()</span> // <span class="title">ctx</span> <span class="title">cancel</span></span></span><br><span class="line"></span><br><span class="line">	ec <span class="keyword">chan</span> exit <span class="comment">// 保存了容器推出码 pid等信息， 32缓冲， shim中协程检查进程写入events，向上publish</span></span><br><span class="line">	id <span class="keyword">string</span><span class="comment">// io.containerd.kata.v2</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<ul>
+<li>service 实现了ttrpc server和shim管理的接口</li>
+</ul>
+<figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">type</span> TaskService <span class="keyword">interface</span> &#123;</span><br><span class="line">	State(ctx context.Context, req *StateRequest) (*StateResponse, error)</span><br><span class="line">	Create(ctx context.Context, req *CreateTaskRequest) (*CreateTaskResponse, error)</span><br><span class="line">	Start(ctx context.Context, req *StartRequest) (*StartResponse, error)</span><br><span class="line">	Delete(ctx context.Context, req *DeleteRequest) (*DeleteResponse, error)</span><br><span class="line">	Pids(ctx context.Context, req *PidsRequest) (*PidsResponse, error)</span><br><span class="line">	Pause(ctx context.Context, req *PauseRequest) (*google_protobuf1.Empty, error)</span><br><span class="line">	Resume(ctx context.Context, req *ResumeRequest) (*google_protobuf1.Empty, error)</span><br><span class="line">	Checkpoint(ctx context.Context, req *CheckpointTaskRequest) (*google_protobuf1.Empty, error)</span><br><span class="line">	Kill(ctx context.Context, req *KillRequest) (*google_protobuf1.Empty, error)</span><br><span class="line">	Exec(ctx context.Context, req *ExecProcessRequest) (*google_protobuf1.Empty, error)</span><br><span class="line">	ResizePty(ctx context.Context, req *ResizePtyRequest) (*google_protobuf1.Empty, error)</span><br><span class="line">	CloseIO(ctx context.Context, req *CloseIORequest) (*google_protobuf1.Empty, error)</span><br><span class="line">	Update(ctx context.Context, req *UpdateTaskRequest) (*google_protobuf1.Empty, error)</span><br><span class="line">    <span class="comment">// 获取容器退出状态</span></span><br><span class="line">	Wait(ctx context.Context, req *WaitRequest) (*WaitResponse, error)</span><br><span class="line">	Stats(ctx context.Context, req *StatsRequest) (*StatsResponse, error)</span><br><span class="line">    <span class="comment">// 获取shim pid</span></span><br><span class="line">	Connect(ctx context.Context, req *ConnectRequest) (*ConnectResponse, error)</span><br><span class="line">    <span class="comment">// 取消全部context子任务并停止containerd-shim-kata-v2进程</span></span><br><span class="line">	Shutdown(ctx context.Context, req *ShutdownRequest) (*google_protobuf1.Empty, error)</span><br><span class="line">&#125;</span><br><span class="line"><span class="comment">// Shim server interface</span></span><br><span class="line"><span class="keyword">type</span> Shim <span class="keyword">interface</span> &#123;</span><br><span class="line">	shimapi.TaskService</span><br><span class="line">	Cleanup(ctx context.Context) (*shimapi.DeleteResponse, error)</span><br><span class="line">	StartShim(ctx context.Context, id, containerdBinary, containerdAddress <span class="keyword">string</span>) (<span class="keyword">string</span>, error)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+
+
+<h3 id="iSulad通过containerd-shim-kata-v2运行容器"><a href="#iSulad通过containerd-shim-kata-v2运行容器" class="headerlink" title="iSulad通过containerd-shim-kata-v2运行容器"></a>iSulad通过containerd-shim-kata-v2运行容器</h3><ul>
+<li>启动pause容器。</li>
+</ul>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">isula run -tid --runtime io.containerd.kata.v2 --network none --annotation io.kubernetes.docker.type=podsandbox &lt;pause-image&gt; &lt;<span class="built_in">command</span>&gt;</span><br></pre></td></tr></table></figure>
+
+<p>此处获取pod的sandbox-id。</p>
+<ul>
+<li>创建业务容器并加入到这个pod中</li>
+</ul>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">isula run -tid --runtime io.containerd.kata.v2 --network none --annotation io.kubernetes.docker.type=container --annotation io.kubernetes.sandbox.id=&lt;sandbox-id&gt; busybox &lt;<span class="built_in">command</span>&gt;</span><br></pre></td></tr></table></figure>
+
+
+
+<h3 id="containerd通过containerd-shim-kata-v2运行容器"><a href="#containerd通过containerd-shim-kata-v2运行容器" class="headerlink" title="containerd通过containerd-shim-kata-v2运行容器"></a>containerd通过containerd-shim-kata-v2运行容器</h3><p>自行安装cri-tools工具，本文使用github.com上master分支编译安装。</p>
+<ul>
+<li>containerd配置：</li>
+</ul>
+<p>containerd配置文件/etc/containerd/config.toml中增加如下一段用来配置kata参数</p>
+<figure class="highlight toml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="section">[plugins.&quot;io.containerd.grpc.v1.cri&quot;.containerd.runtimes]</span></span><br><span class="line">//</span><br><span class="line">        <span class="section">[plugins.&quot;io.containerd.grpc.v1.cri&quot;.containerd.runtimes.kata]</span></span><br><span class="line">          <span class="attr">runtime_type</span> = <span class="string">&quot;io.containerd.kata.v2&quot;</span></span><br><span class="line">          <span class="attr">pod_annotations</span> = [<span class="string">&quot;com.github.containers.virtcontainers.sandbox_cpu&quot;</span>, <span class="string">&quot;com.github.containers.virtcontainers.sandbox_mem&quot;</span>, <span class="string">&quot;com.github.containers.virtcontainers.static_devices&quot;</span>, <span class="string">&quot;com.github.containers.virtcontainers.sandbox_drivers&quot;</span>, <span class="string">&quot;com.github.containers.virtcontainers.boot_cgroup&quot;</span>]</span><br><span class="line">          <span class="attr">container_annotations</span> = [<span class="string">&quot;com.github.containers.virtcontainers.storage_spec&quot;</span>]</span><br><span class="line">//</span><br><span class="line">        <span class="section">[plugins.&quot;io.containerd.grpc.v1.cri&quot;.containerd.runtimes.runc]</span></span><br><span class="line">          <span class="attr">base_runtime_spec</span> = <span class="string">&quot;&quot;</span></span><br><span class="line"></span><br></pre></td></tr></table></figure>
+
+<ul>
+<li>安装cni插件：</li>
+</ul>
+<p>参考如下教程，自行编译plugins</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">https://github.com/containerd/containerd/blob/master/script/setup/install-cni</span><br></pre></td></tr></table></figure>
+
+<ul>
+<li>指定runtime运行pod:</li>
+</ul>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line">$ crictl -i unix:///var/run/containerd/containerd.sock -r unix:///var/run/containerd/containerd.sock runp --runtime kata sandbox-config.json</span><br><span class="line">$ cat sandbox-config.json</span><br><span class="line">&#123;</span><br><span class="line">    <span class="string">&quot;metadata&quot;</span>: &#123;</span><br><span class="line">            <span class="string">&quot;name&quot;</span>: <span class="string">&quot;nginx-sandbox&quot;</span>,</span><br><span class="line">            <span class="string">&quot;namespace&quot;</span>: <span class="string">&quot;default&quot;</span>,</span><br><span class="line">            <span class="string">&quot;attempt&quot;</span>: 1,</span><br><span class="line">            <span class="string">&quot;uid&quot;</span>: <span class="string">&quot;hdishd83djaidwnduwk28bcsb&quot;</span></span><br><span class="line">        &#125;,</span><br><span class="line">    <span class="string">&quot;image&quot;</span>: &#123;</span><br><span class="line">        <span class="string">&quot;image&quot;</span>: <span class="string">&quot;docker.io/library/busybox:latest&quot;</span></span><br><span class="line">    &#125;,</span><br><span class="line">    <span class="string">&quot;linux&quot;</span>: &#123;</span><br><span class="line">        &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+
+      
+
+      
+    </div>
+    <div class="article-info article-info-index">
+      
+      
+	<div class="article-tag tagcloud">
+		<i class="icon-price-tags icon"></i>
+		<ul class="article-tag-list">
+			 
+        		<li class="article-tag-list-item">
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color3">kata, shimv2</a>
+        		</li>
+      		
+		</ul>
+	</div>
+
+      
+
+      
+        <p class="article-more-link">
+          <a class="article-more-a" href="/2021/09/06/isulad-shimv1-shimv2-diff/">展开全文 >></a>
+        </p>
+      
+
+      
+      <div class="clearfix"></div>
+    </div>
+  </div>
+</article>
+
+<aside class="wrap-side-operation">
+    <div class="mod-side-operation">
+        
+        <div class="jump-container" id="js-jump-container" style="display:none;">
+            <a href="javascript:void(0)" class="mod-side-operation__jump-to-top">
+                <i class="icon-font icon-back"></i>
+            </a>
+            <div id="js-jump-plan-container" class="jump-plan-container" style="top: -11px;">
+                <i class="icon-font icon-plane jump-plane"></i>
+            </div>
+        </div>
+        
+        
+    </div>
+</aside>
+
+
+
+
+  
     <article id="post-isula-shimv2-stratovirt" class="article article-type-post  article-index" itemscope itemprop="blogPost">
   <div class="article-inner">
     
@@ -178,48 +337,62 @@
         <h2 id="概述"><a href="#概述" class="headerlink" title="概述"></a>概述</h2><p>shim v2是最新一代shim架构方案，相比于shim v1，具有调用链更短、架构清晰的优势，在多业务容器container场景，具备明显的低内存开销优势。iSula运行安全容器可以通过isulad-shim或者containerd-shim-kata-v2来实现，其中isulad-shim组件式shim v1方案的具体实现，containerd-shim-kata-v2组件是shim v2方案在安全容器场景的一种具体实现，本文介绍iSula与containerd-shim-kata-v2的对接。</p>
 <h2 id="对接containerd-shim-v2-kata"><a href="#对接containerd-shim-v2-kata" class="headerlink" title="对接containerd-shim-v2-kata"></a>对接containerd-shim-v2-kata</h2><h3 id="前提条件"><a href="#前提条件" class="headerlink" title="前提条件"></a><strong>前提条件</strong></h3><p>安装 iSulad、lib-shim-v2和 kata-containers，并确保iSulad使用的devicemapper 存储驱动正常工作，当前stratovirt仅支持devicemapper存储驱动.</p>
 <p>此处给出安装 iSulad 和 kata-containers 并进行相应配置的参考方法。</p>
-<ol>
-<li><p>按照所使用的OS版本自行配置相应的 yum 源，使用 root 权限安装 iSulad、lib-shim-v2和kata-containers </p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#</span><span class="bash"> yum install iSulad</span></span><br><span class="line"><span class="meta">#</span><span class="bash"> yum install kata-containers</span></span><br><span class="line"><span class="meta">#</span><span class="bash"> yum install lib-shim-v2</span></span><br></pre></td></tr></table></figure></li>
-<li><p>制作并配置存储 Storage</p>
+<p>1、按照所使用的OS版本自行配置相应的 yum 源，使用 root 权限安装 iSulad、lib-shim-v2和kata-containers </p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#</span><span class="bash"> yum install iSulad</span></span><br><span class="line"><span class="meta">#</span><span class="bash"> yum install kata-containers</span></span><br><span class="line"><span class="meta">#</span><span class="bash"> yum install lib-shim-v2</span></span><br></pre></td></tr></table></figure>
+
+<p>2、制作并配置存储 Storage</p>
 <p>需要用户规划好磁盘如/dev/sdxx,该磁盘会被格式化，本文使用loop设备作为块设备进行演示，使用磁盘或者loop设备流程式相同的。</p>
 <p>创建10G空的loop设备</p>
 <figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">$ dd <span class="keyword">if</span>=/dev/zero of=isula.img bs=50M count=200</span><br><span class="line">$ mkfs.ext4 isula.img</span><br><span class="line">$ losetup /dev/loop0 isula.img</span><br></pre></td></tr></table></figure>
 
 <p>创建devicemapper</p>
- <figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#</span><span class="bash"> 创建 pv</span></span><br><span class="line"><span class="meta">$</span><span class="bash"> pvcreate /dev/loop0</span></span><br><span class="line">  Physical volume &quot;/dev/loop0&quot; successfully created.</span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#</span><span class="bash"> 创建 vg</span></span><br><span class="line"><span class="meta">$</span><span class="bash"> vgcreate isula /dev/loop0</span></span><br><span class="line">  Volume group &quot;isula&quot; successfully created</span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#</span><span class="bash"> 创建 thinpool 以及 thinpoolmeta 逻辑卷</span></span><br><span class="line"><span class="meta">$</span><span class="bash"> lvcreate --wipesignatures y -n thinpool isula -l 95%VG</span></span><br><span class="line">  Logical volume &quot;thinpool&quot; created.</span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">$</span><span class="bash"> lvcreate --wipesignatures y -n thinpoolmeta isula -l 1%VG</span></span><br><span class="line">  Logical volume &quot;thinpoolmeta&quot; created.</span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#</span><span class="bash"> 将上面创建的逻辑卷转换为 thinpool</span></span><br><span class="line"><span class="meta">$</span><span class="bash"> lvconvert -y --zero n -c 64K \</span></span><br><span class="line"><span class="bash">--thinpool isula/thinpool \</span></span><br><span class="line"><span class="bash">--poolmetadata isula/thinpoolmeta</span></span><br><span class="line">  Thin pool volume with chunk size 512.00 KiB can address at most 126.50 TiB of data.</span><br><span class="line">  WARNING: Converting isula/thinpool and isula/thinpoolmeta to thin pool&#x27;s data and metadata volumes with metadata wiping.</span><br><span class="line">  THIS WILL DESTROY CONTENT OF LOGICAL VOLUME (filesystem etc.)</span><br><span class="line">  Converted isula/thinpool and isula/thinpoolmeta to thin pool.</span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#</span><span class="bash"> 创建并应用 lvm thinpool 自动扩展</span></span><br><span class="line"><span class="meta">$</span><span class="bash"> touch /etc/lvm/profile/isula-thinpool.profile</span></span><br><span class="line"><span class="meta">$</span><span class="bash"> cat &lt;&lt; <span class="string">EOF &gt; /etc/lvm/profile/isula-thinpool.profile</span></span></span><br><span class="line">activation &#123;</span><br><span class="line">  thin_pool_autoextend_threshold=80</span><br><span class="line">  thin_pool_autoextend_percent=20</span><br><span class="line">&#125;</span><br><span class="line">EOF</span><br><span class="line"><span class="meta">$</span><span class="bash"><span class="string"> lvchange --metadataprofile isula-thinpool isula/thinpool</span></span></span><br><span class="line">Logical volume isula/thinpool changed.</span><br></pre></td></tr></table></figure>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#</span><span class="bash"> 创建 pv</span></span><br><span class="line"><span class="meta">$</span><span class="bash"> pvcreate /dev/loop0</span></span><br><span class="line">  Physical volume &quot;/dev/loop0&quot; successfully created.</span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#</span><span class="bash"> 创建 vg</span></span><br><span class="line"><span class="meta">$</span><span class="bash"> vgcreate isula /dev/loop0</span></span><br><span class="line">  Volume group &quot;isula&quot; successfully created</span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#</span><span class="bash"> 创建 thinpool 以及 thinpoolmeta 逻辑卷</span></span><br><span class="line"><span class="meta">$</span><span class="bash"> lvcreate --wipesignatures y -n thinpool isula -l 95%VG</span></span><br><span class="line">  Logical volume &quot;thinpool&quot; created.</span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">$</span><span class="bash"> lvcreate --wipesignatures y -n thinpoolmeta isula -l 1%VG</span></span><br><span class="line">  Logical volume &quot;thinpoolmeta&quot; created.</span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#</span><span class="bash"> 将上面创建的逻辑卷转换为 thinpool</span></span><br><span class="line"><span class="meta">$</span><span class="bash"> lvconvert -y --zero n -c 64K \</span></span><br><span class="line"><span class="bash">--thinpool isula/thinpool \</span></span><br><span class="line"><span class="bash">--poolmetadata isula/thinpoolmeta</span></span><br><span class="line">  Thin pool volume with chunk size 512.00 KiB can address at most 126.50 TiB of data.</span><br><span class="line">  WARNING: Converting isula/thinpool and isula/thinpoolmeta to thin pool&#x27;s data and metadata volumes with metadata wiping.</span><br><span class="line">  THIS WILL DESTROY CONTENT OF LOGICAL VOLUME (filesystem etc.)</span><br><span class="line">  Converted isula/thinpool and isula/thinpoolmeta to thin pool.</span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">#</span><span class="bash"> 创建并应用 lvm thinpool 自动扩展</span></span><br><span class="line"><span class="meta">$</span><span class="bash"> touch /etc/lvm/profile/isula-thinpool.profile</span></span><br><span class="line"><span class="meta">$</span><span class="bash"> cat &lt;&lt; <span class="string">EOF &gt; /etc/lvm/profile/isula-thinpool.profile</span></span></span><br><span class="line">activation &#123;</span><br><span class="line">  thin_pool_autoextend_threshold=80</span><br><span class="line">  thin_pool_autoextend_percent=20</span><br><span class="line">&#125;</span><br><span class="line">EOF</span><br><span class="line"><span class="meta">$</span><span class="bash"><span class="string"> lvchange --metadataprofile isula-thinpool isula/thinpool</span></span></span><br><span class="line">Logical volume isula/thinpool changed.</span><br></pre></td></tr></table></figure>
 
 <p>更改配置文件/etc/isulad/daemon.json中的storage-driver 和 storage-opts 如下：将默认存储驱动类型 overlay 配置成 devicemapper 。</p>
- <figure class="highlight json"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"> &#123;</span><br><span class="line">    <span class="attr">&quot;storage-driver&quot;</span>: <span class="string">&quot;devicemapper&quot;</span>,</span><br><span class="line">    <span class="attr">&quot;storage-opts&quot;</span>: [</span><br><span class="line">        <span class="string">&quot;dm.thinpooldev=/dev/mapper/isula-thinpool&quot;</span>,</span><br><span class="line">        <span class="string">&quot;dm.fs=ext4&quot;</span>,</span><br><span class="line">        <span class="string">&quot;dm.min_free_space=10%&quot;</span></span><br><span class="line">    ]</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></li>
-<li><p>重启 isulad使得配置生效</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#</span><span class="bash"> systemctl daemon-reload</span></span><br><span class="line"><span class="meta">#</span><span class="bash"> systemctl restart isulad</span></span><br></pre></td></tr></table></figure></li>
-<li><p>确认 iSula 存储驱动是否配置成功</p>
+<figure class="highlight json"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"> &#123;</span><br><span class="line">    <span class="attr">&quot;storage-driver&quot;</span>: <span class="string">&quot;devicemapper&quot;</span>,</span><br><span class="line">    <span class="attr">&quot;storage-opts&quot;</span>: [</span><br><span class="line">        <span class="string">&quot;dm.thinpooldev=/dev/mapper/isula-thinpool&quot;</span>,</span><br><span class="line">        <span class="string">&quot;dm.fs=ext4&quot;</span>,</span><br><span class="line">        <span class="string">&quot;dm.min_free_space=10%&quot;</span></span><br><span class="line">    ]</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>3、重启 isulad使得配置生效</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#</span><span class="bash"> systemctl daemon-reload</span></span><br><span class="line"><span class="meta">#</span><span class="bash"> systemctl restart isulad</span></span><br></pre></td></tr></table></figure>
+
+<p>4、 确认 iSula 存储驱动是否配置成功</p>
 <figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#</span><span class="bash"> isula info</span></span><br></pre></td></tr></table></figure>
 
 <p> 若回显有如下信息，说明配置成功。</p>
-<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Storage Driver: devicemapper</span><br></pre></td></tr></table></figure></li>
-<li><p>配置默认runtime为io.containerd.kata.v2，表示isulad对接的是containerd-shim-kata-v2</p>
-<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># vim /etc/isulad/daemon.json</span></span><br><span class="line"><span class="string">&quot;default-runtime&quot;</span>: <span class="string">&quot;io.containerd.kata.v2&quot;</span>,</span><br></pre></td></tr></table></figure></li>
-</ol>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Storage Driver: devicemapper</span><br></pre></td></tr></table></figure>
+
+<p>5、配置默认runtime为io.containerd.kata.v2，表示isulad对接的是containerd-shim-kata-v2</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># vim /etc/isulad/daemon.json</span></span><br><span class="line"><span class="string">&quot;default-runtime&quot;</span>: <span class="string">&quot;io.containerd.kata.v2&quot;</span>,</span><br></pre></td></tr></table></figure>
+
+
+
 <h3 id="对接指导"><a href="#对接指导" class="headerlink" title="对接指导"></a>对接指导</h3><p>containerd-shim-kata-v2默认使用qemu虚拟化组件，下面分别介绍qemu和stratovirt两种虚拟化组件配置方法。</p>
-<h3 id="使用qemu虚拟化组件"><a href="#使用qemu虚拟化组件" class="headerlink" title="使用qemu虚拟化组件"></a>使用qemu虚拟化组件</h3><ol>
-<li><p>修改kata配置文件，路径为/usr/share/defaults/kata-containers/configuration.toml </p>
+<h3 id="使用qemu虚拟化组件"><a href="#使用qemu虚拟化组件" class="headerlink" title="使用qemu虚拟化组件"></a>使用qemu虚拟化组件</h3><ul>
+<li>修改kata配置文件，路径为/usr/share/defaults/kata-containers/configuration.toml </li>
+</ul>
 <p>sandbox_cgroup_with_emulator 需要设置为false， 目前shimv2不支该改功能， 其他参数与shim v1中kata配置参数保持一致或者保持默认值。</p>
-<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">sandbox_cgroup_with_emulator = false</span><br></pre></td></tr></table></figure></li>
-<li><p>运行安全容器</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">sandbox_cgroup_with_emulator = false</span><br></pre></td></tr></table></figure>
+
+<ul>
+<li>运行安全容器</li>
+</ul>
 <p>运行pause和container容器, 镜像id为c07ddb44daa9</p>
 <figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># isula run -tid --runtime io.containerd.kata.v2 --annotation io.kubernetes.docker.type=podsandbox  c07ddb44daa9 /bin/sh</span></span><br><span class="line">7c5dff1e57eed0d14d98c9c4f4a09461b743666ec19fc407252b844d5fe5951c</span><br><span class="line"><span class="comment"># isula run -tid --runtime io.containerd.kata.v2 --annotation io.kubernetes.docker.type=container --annotation io.kubernetes.sandbox.id=7c5dff1e57eed0d14d98c9c4f4a09461b743666ec19fc407252b844d5fe5951c e4db68de4ff2 /bin/sh</span></span><br></pre></td></tr></table></figure>
 
 <p>不指定容器类型时默认为podsandbox</p>
-<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># isula run -tid --runtime io.containerd.kata.v2 c07ddb44daa9 /bin/sh</span></span><br></pre></td></tr></table></figure></li>
-</ol>
-<h3 id="使用stratovir虚拟化组件"><a href="#使用stratovir虚拟化组件" class="headerlink" title="使用stratovir虚拟化组件"></a>使用stratovir虚拟化组件</h3><ol>
-<li><p>在任一目录（例如 /home 目录）新建脚本文件 stratovirt.sh 并使用 root 权限给文件添加执行权限：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># isula run -tid --runtime io.containerd.kata.v2 c07ddb44daa9 /bin/sh</span></span><br></pre></td></tr></table></figure>
+
+
+<h3 id="使用stratovir虚拟化组件"><a href="#使用stratovir虚拟化组件" class="headerlink" title="使用stratovir虚拟化组件"></a>使用stratovir虚拟化组件</h3><ul>
+<li>在任一目录（例如 /home 目录）新建脚本文件 stratovirt.sh 并使用 root 权限给文件添加执行权限：</li>
+</ul>
 <figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#</span><span class="bash"> touch /home/stratovirt.sh</span></span><br><span class="line"><span class="meta">#</span><span class="bash"> chmod +x /home/stratovirt.sh</span></span><br></pre></td></tr></table></figure>
 
 <p>stratovirt.sh 内容如下，用于指定 StratoVirt 路径：</p>
-<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">#!/bin/bash</span><br><span class="line">export STRATOVIRT_LOG_LEVEL=info  # set log level which includes trace, debug, info, warn and error.</span><br><span class="line">/usr/bin/stratovirt $@</span><br></pre></td></tr></table></figure></li>
-<li><p>修改 kata 配置文件 ，将安全容器的 hypervisor 类型配置为 stratovirt，kernel 配置 StratoVirt 的 kernel 镜像绝对路径（下载方式见下文），initrd 配置为 kata-containers 的 initrd 镜像文件（使用 yum 安装 kata-containers 时，默认会下载这个文件并存放在 /var/lib/kata/ 目录），stratovirt仅支持devicemapper存储模式，需提前准备好环境并将iSulad设置为devicemapper模式。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">#!/bin/bash</span><br><span class="line">export STRATOVIRT_LOG_LEVEL=info  # set log level which includes trace, debug, info, warn and error.</span><br><span class="line">/usr/bin/stratovirt $@</span><br></pre></td></tr></table></figure>
+
+<ul>
+<li>修改 kata 配置文件 ，将安全容器的 hypervisor 类型配置为 stratovirt，kernel 配置 StratoVirt 的 kernel 镜像绝对路径（下载方式见下文），initrd 配置为 kata-containers 的 initrd 镜像文件（使用 yum 安装 kata-containers 时，默认会下载这个文件并存放在 /var/lib/kata/ 目录），stratovirt仅支持devicemapper存储模式，需提前准备好环境并将iSulad设置为devicemapper模式。</li>
+</ul>
 <p>配置参考如下：配置参考如下：</p>
 <figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">[hypervisor.stratovirt]</span><br><span class="line">path = &quot;/home/stratovirt.sh&quot;</span><br><span class="line">kernel = &quot;/var/lib/kata/vmlinux.bin&quot;</span><br><span class="line">initrd = &quot;/var/lib/kata/kata-containers-initrd.img&quot;</span><br><span class="line">block_device_driver = &quot;virtio-mmio&quot;</span><br><span class="line">use_vsock = true</span><br><span class="line">enable_netmon = true</span><br><span class="line">internetworking_model=&quot;tcfilter&quot;</span><br><span class="line">sandbox_cgroup_with_emulator = false</span><br><span class="line">disable_new_netns = false</span><br><span class="line">disable_block_device_use = false</span><br><span class="line">disable_vhost_net = true</span><br></pre></td></tr></table></figure>
 
@@ -227,10 +400,13 @@
 <figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">$ modprobe vhost_vsock</span><br><span class="line">$ lsmod |grep vhost_vsock</span><br></pre></td></tr></table></figure>
 
 <p>下载对应版本和架构的kernel并放到/var/lib/kata/路径下, 如下载openEuler 21.03版本x86架构的内核, <a target="_blank" rel="noopener" href="https://repo.openeuler.org/">openeuler repo</a>：</p>
-<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">$ <span class="built_in">cd</span> /var/lib/kata</span><br><span class="line">$ wget https://repo.openeuler.org/openEuler-21.03/stratovirt_img/x86_64/vmlinux.bin</span><br></pre></td></tr></table></figure></li>
-<li><p><strong>isula</strong> 命令运行 busybox 安全容器，容器运行成功，完成 StratoVirt 和 shim v2安全容器的对接。</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">$</span><span class="bash"> isula run -tid --runtime=io.containerd.kata.v2 --net=none --name <span class="built_in">test</span> busybox:latest sh</span></span><br></pre></td></tr></table></figure></li>
-</ol>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">$ <span class="built_in">cd</span> /var/lib/kata</span><br><span class="line">$ wget https://repo.openeuler.org/openEuler-21.03/stratovirt_img/x86_64/vmlinux.bin</span><br></pre></td></tr></table></figure>
+
+<ul>
+<li><strong>isula</strong> 命令运行 busybox 安全容器，容器运行成功，完成 StratoVirt 和 shim v2安全容器的对接。</li>
+</ul>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">$</span><span class="bash"> isula run -tid --runtime=io.containerd.kata.v2 --net=none --name <span class="built_in">test</span> busybox:latest sh</span></span><br></pre></td></tr></table></figure>
+
 
       
 
@@ -1241,6 +1417,10 @@ return o(i(t),arguments.length<2?void 0:u(arguments[1]))}})},function(t,n,r){var
              
               <li class="article-tag-list-item">
                 <a href="javascript:void(0)" class="js-tag color5">iSulad,runtime</a>
+              </li>
+             
+              <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color3">kata, shimv2</a>
               </li>
              
               <li class="article-tag-list-item">
