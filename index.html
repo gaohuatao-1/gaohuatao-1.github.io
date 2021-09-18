@@ -155,6 +155,120 @@
           <div id="js-content" class="content-ll">
             
   
+    <article id="post-seccomp沙箱安全机制-linux系统编程" class="article article-type-post  article-index" itemscope itemprop="blogPost">
+  <div class="article-inner">
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="article-title" href="/2021/09/17/seccomp%E6%B2%99%E7%AE%B1%E5%AE%89%E5%85%A8%E6%9C%BA%E5%88%B6-linux%E7%B3%BB%E7%BB%9F%E7%BC%96%E7%A8%8B/">seccomp沙箱安全机制-linux系统编程</a>
+    </h1>
+  
+
+        
+        <a href="/2021/09/17/seccomp%E6%B2%99%E7%AE%B1%E5%AE%89%E5%85%A8%E6%9C%BA%E5%88%B6-linux%E7%B3%BB%E7%BB%9F%E7%BC%96%E7%A8%8B/" class="archive-article-date">
+  	<time datetime="2021-09-17T01:13:19.000Z" itemprop="datePublished"><i class="icon-calendar icon"></i>2021-09-17</time>
+</a>
+        
+      </header>
+    
+    <div class="article-entry" itemprop="articleBody">
+      
+        <p>sccomp (secute computing mode) 安全计算模式，用于限制应用程序可以使用的系统调用，增加系统的安全性。一切都在内核中实现，无需额外的上下文切换，通过 seccomp 可定义系统调用的白名单和黑名单，自定义出现非法系统调用时的动作，比如结束进程或者使进程调用失败。 seccomp 广泛应用于docker、iSulad 等容器技术中，实现容器中系统调用的限制。主要有 prctl 和 基于BPF 的seccomp 两种实现方式。</p>
+<h2 id="1、prctl-实现方式"><a href="#1、prctl-实现方式" class="headerlink" title="1、prctl 实现方式"></a>1、prctl 实现方式</h2><p>通过 prctl 设置程序的 seccomp 模式，如 strict模式，仅允许调用 read  write  _exit 和 sigreturn 四个系统调用，下面的例子演示了使用方法，当系统调用未在白名单中时，进程会被kill。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/prctl.h&gt;</span></span></span><br><span class="line"><span class="meta">#incluce <span class="meta-string">&lt;linux/seccomp.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;unistd.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;step 1: unrestricted\n&quot;</span>);</span><br><span class="line">    </span><br><span class="line">    prctl(PR_SET_SECCOMP, SECCOMP_MODE_STRICT);</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;step 2: only read, write, _exit, sigreturn syscalls\n&quot;</span>);</span><br><span class="line">    <span class="comment">// redirect stderr to stdout</span></span><br><span class="line">    dup2(<span class="number">1</span>, <span class="number">2</span>);</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;step 3: YOU SHOULD NOT SEE ME\n&quot;</span>);</span><br><span class="line">    </span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>执行后输出：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">step 1: unrestricted</span><br><span class="line">step 2: only read, write, _exit, sigreturn syscalls</span><br><span class="line">kill ...</span><br></pre></td></tr></table></figure>
+
+<h2 id="2、基于-BPF-伯克利包过滤器-的-seccomp"><a href="#2、基于-BPF-伯克利包过滤器-的-seccomp" class="headerlink" title="2、基于 BPF (伯克利包过滤器) 的 seccomp"></a>2、基于 BPF (伯克利包过滤器) 的 seccomp</h2><p>prctl 方式不够灵活，Linux 3.5 后引入了基于 BPF 的可定制的系统调用过滤功能。</p>
+<p>需要安装依赖：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># centos 7</span></span><br><span class="line">yum install libseccomp-devel </span><br></pre></td></tr></table></figure>
+
+<p>demo:</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;sys/prctl.h&gt;</span></span></span><br><span class="line"><span class="meta">#incluce <span class="meta-string">&lt;seccomp.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;unistd.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&lt;errno.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">main</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;step 1: unrestricted\n&quot;</span>);</span><br><span class="line">    </span><br><span class="line">    scmp_filter_ctx ctx;</span><br><span class="line">    ctx = seccomp_init(SCMP_ACT_KILL); <span class="comment">// default action: kill</span></span><br><span class="line">    seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(rt_sigreturn), <span class="number">0</span>); <span class="comment">// 0表示不管其他参数</span></span><br><span class="line">    seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(<span class="built_in">exit</span>), <span class="number">0</span>); </span><br><span class="line">    seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(read), <span class="number">0</span>); </span><br><span class="line">    seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(write), <span class="number">0</span>); </span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 当调用 dup2 函数是，只有前两个参数为 1 2 时， 才允许调用，因此dup2(1,2)被允许，dup2(2, 42)被阻止</span></span><br><span class="line">    seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(dup2), <span class="number">2</span>, SCMP_A0(SCMP_CMP_EQ, <span class="number">1</span>), SCMP_A1(SCMP_CMP_EQ, <span class="number">2</span>));</span><br><span class="line">    <span class="comment">// 可以被调用，但是errno 设置为 41</span></span><br><span class="line">    seccomp_rule_add(ctx, SCMP_ACT_ERRNO(<span class="number">41</span>), SCMP_SYS(dup2), <span class="number">2</span>, SCMP_A0(SCMP_CMP_EQ, <span class="number">2</span>), SCMP_A1(SCMP_CMP_EQ, <span class="number">42</span>));</span><br><span class="line">    seccomp_load(ctx);</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;step 2: only read, write, _exit, sigreturn and dup2(1,2) syscalls\n&quot;</span>);</span><br><span class="line">    <span class="comment">// redirect stderr to stdout</span></span><br><span class="line">    dup2(<span class="number">1</span>, <span class="number">2</span>);</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;step 3: stderr redirected to stdout&quot;</span>);</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// 允许调用，但是报错并且重写errno</span></span><br><span class="line">    <span class="keyword">int</span> ret = dup2(<span class="number">2</span>, <span class="number">42</span>);</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;step 4: YOU SHOULD SEE ME with errno :%d, ret: %d\n&quot;</span>, errno, ret);</span><br><span class="line">    </span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>编译执行：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">step 4: YOU SHOULD SEE ME with errno :%d, ret: %d\gcc main.c -lseccomp -o main</span><br><span class="line">./main</span><br><span class="line">step 1: unrestricted</span><br><span class="line">step 2: only read, write, _exit, sigreturn and dup2(1,2) syscalls</span><br><span class="line">step 3: stderr redirected to stdout</span><br><span class="line">step 4: YOU SHOULD SEE ME with errno :41, ret: -1</span><br><span class="line">xxx invalid system call (core dumped)</span><br></pre></td></tr></table></figure>
+
+<h2 id="3、iSulad-中-seccomp-实现"><a href="#3、iSulad-中-seccomp-实现" class="headerlink" title="3、iSulad 中 seccomp 实现"></a>3、iSulad 中 seccomp 实现</h2><p>1、iSulad :</p>
+<p>配置文件：/etc/isulad/seccomp_default.json</p>
+<p>将seccomp_default.json 解析并写入到 oci spec 中：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">int</span> <span class="title">dup_syscall_to_oci_spec</span><span class="params">(<span class="keyword">const</span> docker_seccomp *docker_seccomp_spec,</span></span></span><br><span class="line"><span class="params"><span class="function">                                   oci_runtime_config_linux_seccomp *oci_seccomp_spec,</span></span></span><br><span class="line"><span class="params"><span class="function">                                   <span class="keyword">const</span> defs_process_capabilities *capabilities)</span></span>&#123;</span><br><span class="line">        <span class="keyword">int</span> ret = <span class="number">0</span>;</span><br><span class="line">    <span class="keyword">size_t</span> i, j, k;</span><br><span class="line">    <span class="keyword">size_t</span> new_size, old_size;</span><br><span class="line">    defs_syscall **tmp_syscalls = <span class="literal">NULL</span>;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (docker_seccomp_spec-&gt;syscalls_len == <span class="number">0</span>) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (docker_seccomp_spec-&gt;syscalls_len &gt; (SIZE_MAX / <span class="keyword">sizeof</span>(defs_syscall *))) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    oci_seccomp_spec-&gt;syscalls = util_common_calloc_s(docker_seccomp_spec-&gt;syscalls_len * <span class="keyword">sizeof</span>(defs_syscall *));</span><br><span class="line">    <span class="keyword">if</span> (oci_seccomp_spec-&gt;syscalls == <span class="literal">NULL</span>) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">for</span> (i = <span class="number">0</span>; i &lt; docker_seccomp_spec-&gt;syscalls_len; i++) &#123;</span><br><span class="line">        <span class="keyword">if</span> (!meet_filtering_rules(docker_seccomp_spec, docker_seccomp_spec-&gt;syscalls[i], capabilities)) &#123;</span><br><span class="line">            <span class="keyword">continue</span>;</span><br><span class="line">        &#125;</span><br><span class="line">        k = oci_seccomp_spec-&gt;syscalls_len;</span><br><span class="line">        oci_seccomp_spec-&gt;syscalls[k] = util_common_calloc_s(<span class="keyword">sizeof</span>(defs_syscall));</span><br><span class="line">        <span class="keyword">if</span> (oci_seccomp_spec-&gt;syscalls[k] == <span class="literal">NULL</span>) &#123;</span><br><span class="line">            <span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line">        &#125;</span><br><span class="line">        oci_seccomp_spec-&gt;syscalls_len++;</span><br><span class="line"></span><br><span class="line">        <span class="keyword">if</span> (docker_seccomp_spec-&gt;syscalls[i]-&gt;names_len &gt; (SIZE_MAX / <span class="keyword">sizeof</span>(<span class="keyword">char</span> *))) &#123;</span><br><span class="line">            <span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        oci_seccomp_spec-&gt;syscalls[k]-&gt;names =</span><br><span class="line">            util_common_calloc_s(docker_seccomp_spec-&gt;syscalls[i]-&gt;names_len * <span class="keyword">sizeof</span>(<span class="keyword">char</span> *));</span><br><span class="line">        <span class="keyword">if</span> (oci_seccomp_spec-&gt;syscalls[k]-&gt;names == <span class="literal">NULL</span>) &#123;</span><br><span class="line">            <span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">for</span> (j = <span class="number">0</span>; j &lt; docker_seccomp_spec-&gt;syscalls[i]-&gt;names_len; j++) &#123;</span><br><span class="line">            oci_seccomp_spec-&gt;syscalls[k]-&gt;names[j] = util_strdup_s(docker_seccomp_spec-&gt;syscalls[i]-&gt;names[j]);</span><br><span class="line">            oci_seccomp_spec-&gt;syscalls[k]-&gt;names_len++;</span><br><span class="line">        &#125;</span><br><span class="line">        oci_seccomp_spec-&gt;syscalls[k]-&gt;action = util_strdup_s(docker_seccomp_spec-&gt;syscalls[i]-&gt;action);</span><br><span class="line">        <span class="keyword">if</span> (dup_syscall_args_to_oci_spec(docker_seccomp_spec-&gt;syscalls[i], oci_seccomp_spec-&gt;syscalls[k])) &#123;</span><br><span class="line">            <span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    new_size = <span class="keyword">sizeof</span>(defs_syscall *) * oci_seccomp_spec-&gt;syscalls_len;</span><br><span class="line">    old_size = <span class="keyword">sizeof</span>(defs_syscall *) * docker_seccomp_spec-&gt;syscalls_len;</span><br><span class="line">    ret = util_mem_realloc((<span class="keyword">void</span> **)&amp;tmp_syscalls, new_size, oci_seccomp_spec-&gt;syscalls, old_size);</span><br><span class="line">    <span class="keyword">if</span> (ret &lt; <span class="number">0</span>) &#123;</span><br><span class="line">        ERROR(<span class="string">&quot;Out of memory&quot;</span>);</span><br><span class="line">        <span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    oci_seccomp_spec-&gt;syscalls = tmp_syscalls;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>2 、 lcr :</p>
+<p>lcr 中将 oci spec 翻译为 lxc 可识别格式并写入到配置文件 config 中，关键函数如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">int</span> <span class="title">seccomp_append_rules</span><span class="params">(<span class="keyword">const</span> defs_syscall *syscall, Buffer *buffer)</span></span>&#123;&#125;</span><br></pre></td></tr></table></figure>
+
+<p>lcr 中将 oci spec 中的 seccomp 配置写入到 /var/lib/isulad/engines/lcr/<id>/seccomp 文件中, /var/lib/isulad/engines/lcr/<id>/config 文件中指定其路径，在 lxc 中解析：</p>
+<ul>
+<li>config:</li>
+</ul>
+<figure class="highlight json"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">lxc.seccomp.profile = /var/lib/isulad/engines/lcr/id/seccomp</span><br></pre></td></tr></table></figure>
+
+<ul>
+<li>seccomp:</li>
+</ul>
+<figure class="highlight yaml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">2</span></span><br><span class="line"><span class="string">whitelist</span> <span class="string">errno</span> <span class="number">1</span></span><br><span class="line">[<span class="string">x86_64</span>]</span><br><span class="line"><span class="string">accept</span> <span class="string">allow</span></span><br><span class="line"><span class="string">...</span></span><br><span class="line">[<span class="string">x86</span>]</span><br><span class="line"><span class="string">accept</span> <span class="string">allow</span></span><br><span class="line"><span class="string">bind</span> <span class="string">allow</span></span><br><span class="line"><span class="string">...</span></span><br><span class="line">[<span class="string">x32</span>]</span><br><span class="line"><span class="string">accept</span> <span class="string">allow</span></span><br><span class="line"><span class="string">...</span></span><br><span class="line">[<span class="string">arm64</span>]</span><br><span class="line"><span class="string">accept</span> <span class="string">allow</span></span><br><span class="line"><span class="string">...</span></span><br><span class="line">[<span class="string">arm</span>]</span><br><span class="line"><span class="string">accept</span> <span class="string">allow</span></span><br><span class="line"><span class="string">...</span></span><br></pre></td></tr></table></figure>
+
+<p>3、 lxc 中调用seccomp 库函数实现最终的系统调用过滤功能。</p>
+<h3 id="Ref"><a href="#Ref" class="headerlink" title="Ref:"></a>Ref:</h3><ul>
+<li><a target="_blank" rel="noopener" href="https://libseccomp.readthedocs.io/en/latest/">libseccomp 库文档</a></li>
+</ul>
+
+      
+
+      
+    </div>
+    <div class="article-info article-info-index">
+      
+      
+	<div class="article-tag tagcloud">
+		<i class="icon-price-tags icon"></i>
+		<ul class="article-tag-list">
+			 
+        		<li class="article-tag-list-item">
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color5">seccomp, linux</a>
+        		</li>
+      		
+		</ul>
+	</div>
+
+      
+
+      
+        <p class="article-more-link">
+          <a class="article-more-a" href="/2021/09/17/seccomp%E6%B2%99%E7%AE%B1%E5%AE%89%E5%85%A8%E6%9C%BA%E5%88%B6-linux%E7%B3%BB%E7%BB%9F%E7%BC%96%E7%A8%8B/">展开全文 >></a>
+        </p>
+      
+
+      
+      <div class="clearfix"></div>
+    </div>
+  </div>
+</article>
+
+<aside class="wrap-side-operation">
+    <div class="mod-side-operation">
+        
+        <div class="jump-container" id="js-jump-container" style="display:none;">
+            <a href="javascript:void(0)" class="mod-side-operation__jump-to-top">
+                <i class="icon-font icon-back"></i>
+            </a>
+            <div id="js-jump-plan-container" class="jump-plan-container" style="top: -11px;">
+                <i class="icon-font icon-plane jump-plane"></i>
+            </div>
+        </div>
+        
+        
+    </div>
+</aside>
+
+
+
+
+  
     <article id="post-isulad-shimv1-shimv2-diff" class="article article-type-post  article-index" itemscope itemprop="blogPost">
   <div class="article-inner">
     
@@ -1412,11 +1526,11 @@ return o(i(t),arguments.length<2?void 0:u(arguments[1]))}})},function(t,n,r){var
               </li>
              
               <li class="article-tag-list-item">
-                <a href="javascript:void(0)" class="js-tag color2">iSulad,kata</a>
+                <a href="javascript:void(0)" class="js-tag color5">iSulad,runtime</a>
               </li>
              
               <li class="article-tag-list-item">
-                <a href="javascript:void(0)" class="js-tag color5">iSulad,runtime</a>
+                <a href="javascript:void(0)" class="js-tag color2">iSulad,kata</a>
               </li>
              
               <li class="article-tag-list-item">
@@ -1425,6 +1539,10 @@ return o(i(t),arguments.length<2?void 0:u(arguments[1]))}})},function(t,n,r){var
              
               <li class="article-tag-list-item">
                 <a href="javascript:void(0)" class="js-tag color1">iSulad, devicemapper</a>
+              </li>
+             
+              <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color5">seccomp, linux</a>
               </li>
             
             <div class="clearfix"></div>
