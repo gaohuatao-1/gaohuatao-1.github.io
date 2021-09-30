@@ -155,6 +155,181 @@
           <div id="js-content" class="content-ll">
             
   
+    <article id="post-containerd-setup-compile-env" class="article article-type-post  article-index" itemscope itemprop="blogPost">
+  <div class="article-inner">
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="article-title" href="/2021/09/30/containerd-setup-compile-env/">containerd-setup-compile-env</a>
+    </h1>
+  
+
+        
+        <a href="/2021/09/30/containerd-setup-compile-env/" class="archive-article-date">
+  	<time datetime="2021-09-30T03:35:57.000Z" itemprop="datePublished"><i class="icon-calendar icon"></i>2021-09-30</time>
+</a>
+        
+      </header>
+    
+    <div class="article-entry" itemprop="articleBody">
+      
+        
+      
+
+      
+    </div>
+    <div class="article-info article-info-index">
+      
+      
+      
+
+      
+        <p class="article-more-link">
+          <a class="article-more-a" href="/2021/09/30/containerd-setup-compile-env/">展开全文 >></a>
+        </p>
+      
+
+      
+      <div class="clearfix"></div>
+    </div>
+  </div>
+</article>
+
+<aside class="wrap-side-operation">
+    <div class="mod-side-operation">
+        
+        <div class="jump-container" id="js-jump-container" style="display:none;">
+            <a href="javascript:void(0)" class="mod-side-operation__jump-to-top">
+                <i class="icon-font icon-back"></i>
+            </a>
+            <div id="js-jump-plan-container" class="jump-plan-container" style="top: -11px;">
+                <i class="icon-font icon-plane jump-plane"></i>
+            </div>
+        </div>
+        
+        
+    </div>
+</aside>
+
+
+
+
+  
+    <article id="post-kata2-x-sandbox-启动流程分析" class="article article-type-post  article-index" itemscope itemprop="blogPost">
+  <div class="article-inner">
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="article-title" href="/2021/09/30/kata2-x-sandbox-%E5%90%AF%E5%8A%A8%E6%B5%81%E7%A8%8B%E5%88%86%E6%9E%90/">kata2.x 使用及源码逻辑分析</a>
+    </h1>
+  
+
+        
+        <a href="/2021/09/30/kata2-x-sandbox-%E5%90%AF%E5%8A%A8%E6%B5%81%E7%A8%8B%E5%88%86%E6%9E%90/" class="archive-article-date">
+  	<time datetime="2021-09-30T03:34:08.000Z" itemprop="datePublished"><i class="icon-calendar icon"></i>2021-09-30</time>
+</a>
+        
+      </header>
+    
+    <div class="article-entry" itemprop="articleBody">
+      
+        <h2 id="kata-agent-编译运行"><a href="#kata-agent-编译运行" class="headerlink" title="kata-agent 编译运行"></a>kata-agent 编译运行</h2><p>编译kata-agent 并 替换 intird</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">$ git <span class="built_in">clone</span> </span><br><span class="line">$ <span class="built_in">cd</span> <span class="variable">$GOPATH</span>/src/github.com/kata-containers/kata-containers</span><br><span class="line">$ <span class="built_in">cd</span> src/agent</span><br><span class="line">// arm 上会执行交叉编译，按照提示安装相应的 toolchain， 或者执行cargo build</span><br><span class="line">$ make -j</span><br><span class="line"></span><br><span class="line">$ <span class="built_in">pwd</span> </span><br><span class="line">/home/ght/initrd</span><br><span class="line">$ cp /usr/lib/kata/kata-containers-initrd.img ./ </span><br><span class="line">$ mv kata-containers-initrd.img kata-containers-initrd.img.gz &amp;&amp; gunzip kata-containers-initrd.img.gz</span><br><span class="line">$ cpio -i -F *.img</span><br><span class="line">$ cp <span class="variable">$GOPATH</span>/src/github.com/kata-containers/kata-containers/src/agent/target/debug/kata-agent ./init</span><br><span class="line">$ rm -rf *.img</span><br><span class="line">$ find . | cpio -H newc -o | gzip -9 &gt; ../kata-ght-initrd.img</span><br></pre></td></tr></table></figure>
+
+<p>修改 kata 配置文件 configuration.toml</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">initrd = &quot;/homt/ght/kata-ght-initrd.img&quot;</span><br></pre></td></tr></table></figure>
+
+<h2 id="kata-中-net-ns查看"><a href="#kata-中-net-ns查看" class="headerlink" title="kata 中 net ns查看"></a>kata 中 net ns查看</h2><p>下面两种方式都可以， 虚拟机进程被加入到了 net ns中，作为 sandbox 网络命名空间的承载。</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">$ ip netns <span class="built_in">exec</span> cnitest-xxx-xx-xxx-xxx ip link</span><br><span class="line">$ nsenter -t &lt;qemu pid&gt; -n ifconfig</span><br><span class="line">eth0:xxxx</span><br><span class="line">lo: xxxx</span><br><span class="line">tap0_kata: xxxx</span><br></pre></td></tr></table></figure>
+
+<p>其中, eth0 设备是 CNI 插件创建的，tap0_kata 在kata2.x 中是由 containerd-shim-kata-v2 代码创建。</p>
+<h2 id="Kata2-x-runp-运行-pod-主要逻辑分析"><a href="#Kata2-x-runp-运行-pod-主要逻辑分析" class="headerlink" title="Kata2.x runp 运行 pod 主要逻辑分析"></a>Kata2.x runp 运行 pod 主要逻辑分析</h2><p>Kata2.x 中组件和调用链都发生了很大的变化， kata-agent 使用 rust 语言重写， 每个sandbox 都会 拉起一个 containerd-shim-kata-v2 进程， 提供了 ttrpc 服务、虚拟机管理、kata-agent 通信等的功能， containerd 提供了 CRI 服务，对 crictl runp 流程进行分析，其流程如下图所示：</p>
+<pre class="mermaid">sequenceDiagram
+    containerd ->>+shimv2: ttrpc Create
+    shimv2 ->>+virtcontainers: CreateSandbox
+    activate virtcontainers
+    virtcontainers ->> virtcontainers: createNetwork
+    virtcontainers ->> hypervisor: startVM
+    hypervisor ->> agent: init process
+    hypervisor -->> virtcontainers: startVM done
+    virtcontainers ->> agent: ttrpc agetn.createContainer
+    activate agent
+    agent->>agent: kata-agent fork <kata-agent init>
+    agent->>agent: <kata-agent init> fork pause
+    agent->>agent: pause pid wait to read exec.fifo
+    deactivate agent
+    agent-->>virtcontainers: kata-agent init process done
+    virtcontainers-->> shimv2: CreatSandbox done
+    deactivate virtcontainers
+    shimv2 -->>+isulad: Create done
+    
+    containerd->>+shimv2: ttrpc Start
+    shimv2->>virtcontainers: Start Container
+    activate virtcontainers
+    virtcontainers ->> agent: ttrpc agent.startContainer
+    agent->>agent: kata-agent write exec.fifo
+    agent->> virtcontainers: ttrpc agent.startContainer done
+    virtcontainers -->> shimv2: Start Container done
+    deactivate virtcontainers
+    shimv2 ->> isulad: Start done</pre>
+
+
+      
+
+      
+    </div>
+    <div class="article-info article-info-index">
+      
+      
+	<div class="article-tag tagcloud">
+		<i class="icon-price-tags icon"></i>
+		<ul class="article-tag-list">
+			 
+        		<li class="article-tag-list-item">
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color5">kata</a>
+        		</li>
+      		
+		</ul>
+	</div>
+
+      
+
+      
+        <p class="article-more-link">
+          <a class="article-more-a" href="/2021/09/30/kata2-x-sandbox-%E5%90%AF%E5%8A%A8%E6%B5%81%E7%A8%8B%E5%88%86%E6%9E%90/">展开全文 >></a>
+        </p>
+      
+
+      
+      <div class="clearfix"></div>
+    </div>
+  </div>
+</article>
+
+<aside class="wrap-side-operation">
+    <div class="mod-side-operation">
+        
+        <div class="jump-container" id="js-jump-container" style="display:none;">
+            <a href="javascript:void(0)" class="mod-side-operation__jump-to-top">
+                <i class="icon-font icon-back"></i>
+            </a>
+            <div id="js-jump-plan-container" class="jump-plan-container" style="top: -11px;">
+                <i class="icon-font icon-plane jump-plane"></i>
+            </div>
+        </div>
+        
+        
+    </div>
+</aside>
+
+
+
+
+  
     <article id="post-seccomp沙箱安全机制-linux系统编程" class="article article-type-post  article-index" itemscope itemprop="blogPost">
   <div class="article-inner">
     
@@ -1526,11 +1701,11 @@ return o(i(t),arguments.length<2?void 0:u(arguments[1]))}})},function(t,n,r){var
               </li>
              
               <li class="article-tag-list-item">
-                <a href="javascript:void(0)" class="js-tag color5">iSulad,runtime</a>
+                <a href="javascript:void(0)" class="js-tag color2">iSulad,kata</a>
               </li>
              
               <li class="article-tag-list-item">
-                <a href="javascript:void(0)" class="js-tag color2">iSulad,kata</a>
+                <a href="javascript:void(0)" class="js-tag color5">iSulad,runtime</a>
               </li>
              
               <li class="article-tag-list-item">
@@ -1539,6 +1714,10 @@ return o(i(t),arguments.length<2?void 0:u(arguments[1]))}})},function(t,n,r){var
              
               <li class="article-tag-list-item">
                 <a href="javascript:void(0)" class="js-tag color1">iSulad, devicemapper</a>
+              </li>
+             
+              <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color5">kata</a>
               </li>
              
               <li class="article-tag-list-item">
