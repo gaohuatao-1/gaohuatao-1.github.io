@@ -5,24 +5,24 @@
   
   <meta name="renderer" content="webkit">
   <meta http-equiv="X-UA-Compatible" content="IE=edge" >
-  <link rel="dns-prefetch" href="http://gaohuatao-1.github.io">
+  <link rel="dns-prefetch" href="http://gaohuatao.gitee.io">
   <title>kata shimV2中监控容器退出机制的实现方案分析 | 高华涛的博客</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
   <meta name="description" content="当前shim有shimV1和shimV2两种实现架构，shimV1作为传统shim的实现方案，主要被用作容器引擎和runtime的中间层，实现io、signals等的转发；最新版本的shimV2，在shimV1的基础上集成了runtime的功能，缩短了容器创建的调用链， 在某些场景能够有效降低底噪开销。在本文中的shimV2 默认使用的是containerd-shim-kata-v2，以此为分析对">
 <meta property="og:type" content="article">
 <meta property="og:title" content="kata shimV2中监控容器退出机制的实现方案分析">
-<meta property="og:url" content="http://gaohuatao-1.github.io/2021/09/06/isulad-shimv1-shimv2-diff/index.html">
+<meta property="og:url" content="http://gaohuatao.gitee.io/2021/09/06/isulad-shimv1-shimv2-diff/index.html">
 <meta property="og:site_name" content="高华涛的博客">
 <meta property="og:description" content="当前shim有shimV1和shimV2两种实现架构，shimV1作为传统shim的实现方案，主要被用作容器引擎和runtime的中间层，实现io、signals等的转发；最新版本的shimV2，在shimV1的基础上集成了runtime的功能，缩短了容器创建的调用链， 在某些场景能够有效降低底噪开销。在本文中的shimV2 默认使用的是containerd-shim-kata-v2，以此为分析对">
 <meta property="og:locale" content="en_US">
-<meta property="og:image" content="http://gaohuatao-1.github.io/2021/09/06/isulad-shimv1-shimv2-diff/2021-04-09-isulad-shimv2-arch-1.png">
-<meta property="og:image" content="http://gaohuatao-1.github.io/2021/09/06/isulad-shimv1-shimv2-diff/2021-04-09-isulad-shimv2-shimv2-differences.png">
+<meta property="og:image" content="http://gaohuatao.gitee.io/2021/09/06/isulad-shimv1-shimv2-diff/2021-04-09-isulad-shimv2-arch-1.png">
+<meta property="og:image" content="http://gaohuatao.gitee.io/2021/09/06/isulad-shimv1-shimv2-diff/2021-04-09-isulad-shimv2-shimv2-differences.png">
 <meta property="article:published_time" content="2021-09-06T01:52:03.000Z">
 <meta property="article:modified_time" content="2021-09-06T02:01:40.380Z">
 <meta property="article:author" content="Gao Huatao">
 <meta property="article:tag" content="kata, shimv2">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:image" content="http://gaohuatao-1.github.io/2021/09/06/isulad-shimv1-shimv2-diff/2021-04-09-isulad-shimv2-arch-1.png">
+<meta name="twitter:image" content="http://gaohuatao.gitee.io/2021/09/06/isulad-shimv1-shimv2-diff/2021-04-09-isulad-shimv2-arch-1.png">
   
     <link rel="alternative" href="/atom.xml" title="高华涛的博客" type="application/atom+xml">
   
@@ -354,7 +354,7 @@
     <a class="close js-modal-close" href="javascript:;"><i class="icon icon-close"></i></a>
     <p>扫一扫，分享到微信</p>
     <div class="wx-qrcode">
-      <img src="//pan.baidu.com/share/qrcode?url=http://gaohuatao-1.github.io/2021/09/06/isulad-shimv1-shimv2-diff/" alt="微信分享二维码">
+      <img src="//pan.baidu.com/share/qrcode?url=http://gaohuatao.gitee.io/2021/09/06/isulad-shimv1-shimv2-diff/" alt="微信分享二维码">
     </div>
 </div>
 
