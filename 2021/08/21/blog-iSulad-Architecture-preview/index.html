@@ -5,30 +5,30 @@
   
   <meta name="renderer" content="webkit">
   <meta http-equiv="X-UA-Compatible" content="IE=edge" >
-  <link rel="dns-prefetch" href="http://gaohuatao.gitee.io">
+  <link rel="dns-prefetch" href="http://gaohuatao-1.github.io">
   <title>iSulad 轻量级容器引擎功能介绍以及代码架构解析 | 高华涛的博客</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
   <meta name="description" content="iSulad 是一种由 C&#x2F;C++编程语言编写的容器引擎，当前已经在 openeuler 社区开源(https:&#x2F;&#x2F;gitee.com&#x2F;openeuler&#x2F;iSulad)。 当前主流的容器引擎 docker、containerd、cri-o 等均是由 GO 语言编写。随着边缘计算、物联网等嵌入式设备场景的不断兴起，在资源受限环境下，业务容器化的需求越来越强烈。由高级语言编写的容器引擎在底燥占用上的">
 <meta property="og:type" content="article">
 <meta property="og:title" content="iSulad 轻量级容器引擎功能介绍以及代码架构解析">
-<meta property="og:url" content="http://gaohuatao.gitee.io/2021/08/21/blog-iSulad-Architecture-preview/index.html">
+<meta property="og:url" content="http://gaohuatao-1.github.io/2021/08/21/blog-iSulad-Architecture-preview/index.html">
 <meta property="og:site_name" content="高华涛的博客">
 <meta property="og:description" content="iSulad 是一种由 C&#x2F;C++编程语言编写的容器引擎，当前已经在 openeuler 社区开源(https:&#x2F;&#x2F;gitee.com&#x2F;openeuler&#x2F;iSulad)。 当前主流的容器引擎 docker、containerd、cri-o 等均是由 GO 语言编写。随着边缘计算、物联网等嵌入式设备场景的不断兴起，在资源受限环境下，业务容器化的需求越来越强烈。由高级语言编写的容器引擎在底燥占用上的">
 <meta property="og:locale" content="en_US">
-<meta property="og:image" content="http://gaohuatao.gitee.io/2021/08/21/blog-iSulad-Architecture-preview/archi.png">
-<meta property="og:image" content="http://gaohuatao.gitee.io/2021/08/21/blog-iSulad-Architecture-preview/iSulad-place.png">
-<meta property="og:image" content="http://gaohuatao.gitee.io/2021/08/21/blog-iSulad-Architecture-preview/iSulad-cri.png">
-<meta property="og:image" content="http://gaohuatao.gitee.io/2021/08/21/blog-iSulad-Architecture-preview/iSulad-cni.png">
-<meta property="og:image" content="http://gaohuatao.gitee.io/2021/08/21/blog-iSulad-Architecture-preview/iSulad-img-single.png">
-<meta property="og:image" content="http://gaohuatao.gitee.io/2021/08/21/blog-iSulad-Architecture-preview/iSulad-img-dual.png">
-<meta property="og:image" content="http://gaohuatao.gitee.io/2021/08/21/blog-iSulad-Architecture-preview/directory.jpg">
-<meta property="og:image" content="http://gaohuatao.gitee.io/2021/08/21/blog-iSulad-Architecture-preview/call_map.jpg">
+<meta property="og:image" content="http://gaohuatao-1.github.io/2021/08/21/blog-iSulad-Architecture-preview/archi.png">
+<meta property="og:image" content="http://gaohuatao-1.github.io/2021/08/21/blog-iSulad-Architecture-preview/iSulad-place.png">
+<meta property="og:image" content="http://gaohuatao-1.github.io/2021/08/21/blog-iSulad-Architecture-preview/iSulad-cri.png">
+<meta property="og:image" content="http://gaohuatao-1.github.io/2021/08/21/blog-iSulad-Architecture-preview/iSulad-cni.png">
+<meta property="og:image" content="http://gaohuatao-1.github.io/2021/08/21/blog-iSulad-Architecture-preview/iSulad-img-single.png">
+<meta property="og:image" content="http://gaohuatao-1.github.io/2021/08/21/blog-iSulad-Architecture-preview/iSulad-img-dual.png">
+<meta property="og:image" content="http://gaohuatao-1.github.io/2021/08/21/blog-iSulad-Architecture-preview/directory.jpg">
+<meta property="og:image" content="http://gaohuatao-1.github.io/2021/08/21/blog-iSulad-Architecture-preview/call_map.jpg">
 <meta property="article:published_time" content="2021-08-21T07:57:24.000Z">
 <meta property="article:modified_time" content="2021-08-23T09:16:53.410Z">
 <meta property="article:author" content="Gao Huatao">
 <meta property="article:tag" content="iSulad">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:image" content="http://gaohuatao.gitee.io/2021/08/21/blog-iSulad-Architecture-preview/archi.png">
+<meta name="twitter:image" content="http://gaohuatao-1.github.io/2021/08/21/blog-iSulad-Architecture-preview/archi.png">
   
     <link rel="alternative" href="/atom.xml" title="高华涛的博客" type="application/atom+xml">
   
@@ -626,7 +626,7 @@
     <a class="close js-modal-close" href="javascript:;"><i class="icon icon-close"></i></a>
     <p>扫一扫，分享到微信</p>
     <div class="wx-qrcode">
-      <img src="//pan.baidu.com/share/qrcode?url=http://gaohuatao.gitee.io/2021/08/21/blog-iSulad-Architecture-preview/" alt="微信分享二维码">
+      <img src="//pan.baidu.com/share/qrcode?url=http://gaohuatao-1.github.io/2021/08/21/blog-iSulad-Architecture-preview/" alt="微信分享二维码">
     </div>
 </div>
 

@@ -5,18 +5,18 @@
   
   <meta name="renderer" content="webkit">
   <meta http-equiv="X-UA-Compatible" content="IE=edge" >
-  <link rel="dns-prefetch" href="http://gaohuatao.gitee.io">
+  <link rel="dns-prefetch" href="http://gaohuatao-1.github.io">
   <title>iSulad 中 devicemapper driver 实现原理 | 高华涛的博客</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
   <meta name="description" content="isulad中当前支持两种 storage driver: devicemapper 和 overlay，下面分别介绍两种storage driver 的原理和实现方式。overlay 是文件级存储，devicemapper是块级存储，当文件特别大而修改的内容很小，overlay 不管修改的内容大小都会复制整个文件， 对大文件的显然要比小文件的修改更耗时，而块级存储无论是大文件还是小文件都只复制需">
 <meta property="og:type" content="article">
 <meta property="og:title" content="iSulad 中 devicemapper driver 实现原理">
-<meta property="og:url" content="http://gaohuatao.gitee.io/2021/08/02/isulad-storage-driver/index.html">
+<meta property="og:url" content="http://gaohuatao-1.github.io/2021/08/02/isulad-storage-driver/index.html">
 <meta property="og:site_name" content="高华涛的博客">
 <meta property="og:description" content="isulad中当前支持两种 storage driver: devicemapper 和 overlay，下面分别介绍两种storage driver 的原理和实现方式。overlay 是文件级存储，devicemapper是块级存储，当文件特别大而修改的内容很小，overlay 不管修改的内容大小都会复制整个文件， 对大文件的显然要比小文件的修改更耗时，而块级存储无论是大文件还是小文件都只复制需">
 <meta property="og:locale" content="en_US">
 <meta property="og:image" content="https://www.pianshen.com/images/880/aef1af3e0cf9f48b3a616cc7dd76a940.png">
-<meta property="og:image" content="http://gaohuatao.gitee.io/2021/08/02/isulad-storage-driver/multi-layer.png">
+<meta property="og:image" content="http://gaohuatao-1.github.io/2021/08/02/isulad-storage-driver/multi-layer.png">
 <meta property="article:published_time" content="2021-08-02T03:20:23.000Z">
 <meta property="article:modified_time" content="2021-09-02T08:32:36.760Z">
 <meta property="article:author" content="Gao Huatao">
@@ -319,7 +319,7 @@
     <a class="close js-modal-close" href="javascript:;"><i class="icon icon-close"></i></a>
     <p>扫一扫，分享到微信</p>
     <div class="wx-qrcode">
-      <img src="//pan.baidu.com/share/qrcode?url=http://gaohuatao.gitee.io/2021/08/02/isulad-storage-driver/" alt="微信分享二维码">
+      <img src="//pan.baidu.com/share/qrcode?url=http://gaohuatao-1.github.io/2021/08/02/isulad-storage-driver/" alt="微信分享二维码">
     </div>
 </div>
 
