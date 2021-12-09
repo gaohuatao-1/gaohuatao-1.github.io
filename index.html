@@ -155,6 +155,122 @@
           <div id="js-content" class="content-ll">
             
   
+    <article id="post-firewall" class="article article-type-post  article-index" itemscope itemprop="blogPost">
+  <div class="article-inner">
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="article-title" href="/2021/12/09/firewall/">Linux 防火墙管理命令介绍</a>
+    </h1>
+  
+
+        
+        <a href="/2021/12/09/firewall/" class="archive-article-date">
+  	<time datetime="2021-12-09T08:41:34.000Z" itemprop="datePublished"><i class="icon-calendar icon"></i>2021-12-09</time>
+</a>
+        
+      </header>
+    
+    <div class="article-entry" itemprop="articleBody">
+      
+        <p>firewalld和iptables的作用都是维护规则，本身不具备防火墙的功能，真正使用规则干活的是内核中的netfilter，firewalld 和 iptables的结构和使用方式不同罢了。两者都是通过systemctl 服务来管理，都有服务端运行， 都需要安装相应的包， iptables和firewalld包。针对两种规则管理工具，网上资料有很多，在这里只做一个总体概括，具体的命令使用方式参考链接即可。</p>
+<h2 id="一、iptables"><a href="#一、iptables" class="headerlink" title="一、iptables"></a>一、iptables</h2><h3 id="规则生效"><a href="#规则生效" class="headerlink" title="规则生效"></a>规则生效</h3><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">iptables -A INPUT -p tcp -m state --state NEW -m tcp --dport 82 -j ACCEPT</span><br></pre></td></tr></table></figure>
+
+<p>通过iptables命令添加规则，规则立即生效，但是重启iptables服务或者linux系统后就消失了，可通过如下方式来永久生效:</p>
+<ul>
+<li>使用命令增加规则，保存到规则文件， 重启系统或者iptables都会生效</li>
+</ul>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">$ service iptables save</span><br><span class="line">iptables: Saving firewall rules to /etc/sysconfig/iptables: [ OK ]</span><br><span class="line"><span class="comment"># 修改 /etc/sysconfig/iptables 文件，重启iptables服务即可生效</span></span><br><span class="line">$ systemctl restart iptables.service</span><br></pre></td></tr></table></figure>
+
+<ul>
+<li>直接修改 /etc/sysconfig/iptables 文件，重启系统或者iptables都会生效</li>
+</ul>
+<h3 id="规则链"><a href="#规则链" class="headerlink" title="规则链"></a>规则链</h3><p>任何数据包，只要经过分级必将经历其中一个</p>
+<ul>
+<li>PREROUTING （路由前）</li>
+<li>INPUT（数据包流入口）</li>
+<li>FORWARD（转发关卡）</li>
+<li>OUTPUT（数据包出口）</li>
+<li>POSTROUTING(路由后)</li>
+</ul>
+<h3 id="规则表"><a href="#规则表" class="headerlink" title="规则表"></a>规则表</h3><ul>
+<li><p>raw: 优先级最高，表示按照对数据包的操作区分的</p>
+</li>
+<li><p>filter: 一般的过滤功能 </p>
+</li>
+<li><p>nat: 端口映射、地址映射</p>
+</li>
+<li><p>mangle: 用于对特定数据包的修改</p>
+</li>
+</ul>
+<p><a target="_blank" rel="noopener" href="https://blog.csdn.net/skh2015java/article/details/82528397">iptables规则详解</a></p>
+<h2 id="二、firewalld"><a href="#二、firewalld" class="headerlink" title="二、firewalld"></a>二、firewalld</h2><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">$ systemctl status firewalld</span><br><span class="line">$ firewall-cmd --state <span class="comment"># 查看防火墙状态</span></span><br><span class="line">$ firewall-cmd --list-all <span class="comment"># 查看全部规则</span></span><br><span class="line">$ firewall-cmd --reload <span class="comment"># 重新加载配置文件</span></span><br></pre></td></tr></table></figure>
+
+<p>firewalld防火墙规则分为两种状态：</p>
+<p>一种是runtime，指正在运行生效的状态，在runtime状态添加新的防火墙规则，这些规则会立即生效，但是重新加载防火墙配置或者再重启系统后这些规则将会失效 另一种是permanent，指永久生效的状态，在permanent状态添加新的防火墙规则，这些规则不会马上生效，需要重新加载防火墙配置或者重启系统后生效 在使用firewall-cmd命令管理防火墙时，需要添加为永久生效的规则需在配置规则时添加–permanent选项（否则所有命令都是作用于runtime，运行时配置）</p>
+<p>如果让永久生效规则立即覆盖当前规则生效使用，还需要使用firewall-cmd –reload命令重新加载防火墙配置</p>
+<p><a target="_blank" rel="noopener" href="https://cloud.tencent.com/developer/article/1691072">命令参考</a></p>
+<h2 id="三、firewalld-和-iptables-的区别"><a href="#三、firewalld-和-iptables-的区别" class="headerlink" title="三、firewalld 和 iptables 的区别"></a>三、firewalld 和 iptables 的区别</h2><ol>
+<li>firewalld 使用区域和服务而不是链式规则</li>
+<li>firewalld 默认是拒绝的，需要设置才能放行， iptables默认是允许的，需要拒绝才能限制。</li>
+<li>firewalld 是iptables 的一个封装， 更容易管理iptables规则，不是替代，iptables命令仍可用于firewalld， 建议firewalld时仅使用自身命令。</li>
+<li>firewalld 可以动态修改单条规则， 而不需要像iptables那样， 修改了规则后必须全部刷新才生效。</li>
+</ol>
+
+      
+
+      
+    </div>
+    <div class="article-info article-info-index">
+      
+      
+	<div class="article-tag tagcloud">
+		<i class="icon-price-tags icon"></i>
+		<ul class="article-tag-list">
+			 
+        		<li class="article-tag-list-item">
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color1">linux</a>
+        		</li>
+      		
+		</ul>
+	</div>
+
+      
+
+      
+        <p class="article-more-link">
+          <a class="article-more-a" href="/2021/12/09/firewall/">展开全文 >></a>
+        </p>
+      
+
+      
+      <div class="clearfix"></div>
+    </div>
+  </div>
+</article>
+
+<aside class="wrap-side-operation">
+    <div class="mod-side-operation">
+        
+        <div class="jump-container" id="js-jump-container" style="display:none;">
+            <a href="javascript:void(0)" class="mod-side-operation__jump-to-top">
+                <i class="icon-font icon-back"></i>
+            </a>
+            <div id="js-jump-plan-container" class="jump-plan-container" style="top: -11px;">
+                <i class="icon-font icon-plane jump-plane"></i>
+            </div>
+        </div>
+        
+        
+    </div>
+</aside>
+
+
+
+
+  
     <article id="post-dev-tools" class="article article-type-post  article-index" itemscope itemprop="blogPost">
   <div class="article-inner">
     
@@ -179,6 +295,9 @@
 <li><a target="_blank" rel="noopener" href="https://excalidraw.com/">手绘草图</a>  在线画草图</li>
 <li>Markdown 命令行式画图 mermaid</li>
 <li>windows 下亿图  Edraw Max 流程图绘制</li>
+</ol>
+<h2 id="优秀博客："><a href="#优秀博客：" class="headerlink" title="优秀博客："></a>优秀博客：</h2><ol>
+<li><a target="_blank" rel="noopener" href="https://refactoringguru.cn/design-patterns/catalog">图解设计模式</a></li>
 </ol>
 <h2 id="研发工具"><a href="#研发工具" class="headerlink" title="研发工具"></a>研发工具</h2><ol>
 <li>github1s.com 在线看代码，内置vscode，阅读代码很丝滑～</li>
@@ -1460,7 +1579,7 @@
 
 
 
-<h2 id="git-命令"><a href="#git-命令" class="headerlink" title="git 命令"></a>git 命令</h2><figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">$</span><span class="bash"> git config --global http.sslverify <span class="literal">false</span> <span class="comment"># 关闭ssl校验</span></span></span><br></pre></td></tr></table></figure>
+<h2 id="git-命令"><a href="#git-命令" class="headerlink" title="git 命令"></a>git 命令</h2><figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">$</span><span class="bash"> git config --global http.sslverify <span class="literal">false</span> <span class="comment"># 关闭ssl校验</span></span></span><br><span class="line">git push &lt;远程主机名&gt; &lt;本地分支名&gt;：&lt;远程分支名&gt;</span><br><span class="line">git push origin master # 将本地的master分支推送到origin主机的master分支， 如果master分支不存在会被新建</span><br><span class="line">git pull &lt;远程主机名&gt; &lt;远程分支名&gt;:&lt;本地分支名&gt;</span><br><span class="line">git pull origin next # 取回origin/next分支，再与当前分支合并，next为远程分支</span><br></pre></td></tr></table></figure>
 
 
 
@@ -1490,130 +1609,6 @@
       
         <p class="article-more-link">
           <a class="article-more-a" href="/2021/08/20/FirstBlog/">展开全文 >></a>
-        </p>
-      
-
-      
-      <div class="clearfix"></div>
-    </div>
-  </div>
-</article>
-
-<aside class="wrap-side-operation">
-    <div class="mod-side-operation">
-        
-        <div class="jump-container" id="js-jump-container" style="display:none;">
-            <a href="javascript:void(0)" class="mod-side-operation__jump-to-top">
-                <i class="icon-font icon-back"></i>
-            </a>
-            <div id="js-jump-plan-container" class="jump-plan-container" style="top: -11px;">
-                <i class="icon-font icon-plane jump-plane"></i>
-            </div>
-        </div>
-        
-        
-    </div>
-</aside>
-
-
-
-
-  
-    <article id="post-isulad-storage-driver" class="article article-type-post  article-index" itemscope itemprop="blogPost">
-  <div class="article-inner">
-    
-      <header class="article-header">
-        
-  
-    <h1 itemprop="name">
-      <a class="article-title" href="/2021/08/02/isulad-storage-driver/">iSulad 中 devicemapper driver 实现原理</a>
-    </h1>
-  
-
-        
-        <a href="/2021/08/02/isulad-storage-driver/" class="archive-article-date">
-  	<time datetime="2021-08-02T03:20:23.000Z" itemprop="datePublished"><i class="icon-calendar icon"></i>2021-08-02</time>
-</a>
-        
-      </header>
-    
-    <div class="article-entry" itemprop="articleBody">
-      
-        <p>isulad中当前支持两种 storage driver: devicemapper 和 overlay，下面分别介绍两种storage driver 的原理和实现方式。overlay 是文件级存储，devicemapper是块级存储，当文件特别大而修改的内容很小，overlay 不管修改的内容大小都会复制整个文件， 对大文件的显然要比小文件的修改更耗时，而块级存储无论是大文件还是小文件都只复制需要修改的块，并不是整个文件，在这种场景下，devicemapper 要更快，直接访问逻辑块设备，适合 IO 密集的场景，而对于程序内部复杂， 大并发单少 IO 的场景，overlay 的性能更优一些。</p>
-<h2 id="devicemapper"><a href="#devicemapper" class="headerlink" title="devicemapper"></a>devicemapper</h2><ol>
-<li>先来梳理一下几个名词：</li>
-</ol>
-<ul>
-<li>LVM: logical volume manager 普通磁盘分区在逻辑分区划分后不能更改大小，单文件存不下时也有局限，lvm可解决该问题，热调整各分区大小；</li>
-<li>pv, vg, lv： pv表示物理卷组，如一个块设备；对这些pv进行整合组成一个分区组VG(volume group), 进而再次进行分配形成逻辑分区LV(logical volume)，创建成功的逻辑分区对OS来说与其他普通分区无异，好处是可动态调整大小，管理pv vg lv的工具成为lvm。</li>
-</ul>
-<p><img src="https://www.pianshen.com/images/880/aef1af3e0cf9f48b3a616cc7dd76a940.png" alt="img"></p>
-<ol start="2">
-<li> iSulad 中配置devicemapper环境</li>
-</ol>
-<p>选一个空闲的块设备，如 /dev/sdc，基于该块设备创建thinpool, 修改 iSulad 配置文件 daemon.json，设置存储类型为 devicemapper。</p>
-<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br></pre></td><td class="code"><pre><span class="line">disk=/dev/sdc // 以sdc盘为例，创建devicemapper，此处修改为实际使用的磁盘</span><br><span class="line">config=/etc/isulad/daemon.json</span><br><span class="line">rm -rf /var/lib/isulad/*</span><br><span class="line">dmsetup remove_all</span><br><span class="line">lvremove -f isulad/thinpool</span><br><span class="line">lvremove -f isulad/thinpoolmeta</span><br><span class="line">vgremove -f isulad</span><br><span class="line">pvremove -f <span class="variable">$disk</span></span><br><span class="line">mount |grep <span class="string">&quot;<span class="variable">$disk</span>&quot;</span> | grep /var/lib/isulad</span><br><span class="line"><span class="keyword">if</span> [ x<span class="string">&quot;$?&quot;</span> == x<span class="string">&quot;0&quot;</span> ]; <span class="keyword">then</span></span><br><span class="line">	umount /var/lib/isulad</span><br><span class="line"><span class="keyword">fi</span></span><br><span class="line"><span class="built_in">echo</span> y | mkfs.ext4 <span class="string">&quot;<span class="variable">$disk</span>&quot;</span></span><br><span class="line">touch /etc/lvm/profile/isulad-thinpool.profile</span><br><span class="line">cat &gt; /etc/lvm/profile/isulad-thinpool.profile &lt;&lt; <span class="string">EOF</span></span><br><span class="line"><span class="string">activation &#123;</span></span><br><span class="line"><span class="string">thin_pool_autoextend_threshold=90</span></span><br><span class="line"><span class="string">thin_pool_autoextend_percent=80</span></span><br><span class="line"><span class="string">&#125;</span></span><br><span class="line"><span class="string">EOF</span></span><br><span class="line">pvcreate -y <span class="string">&quot;<span class="variable">$disk</span>&quot;</span></span><br><span class="line">vgcreate isulad <span class="string">&quot;<span class="variable">$disk</span>&quot;</span></span><br><span class="line"><span class="built_in">echo</span> y | lvcreate --wipesignatures y -n thinpool isulad -l 90%VG</span><br><span class="line"><span class="built_in">echo</span> y | lvcreate --wipesignatures y -n thinpoolmeta isulad -l 2%VG</span><br><span class="line">lvconvert -y --zero n -c 64k --thinpool isulad/thinpool --poolmetadata isulad/thinpoolmeta</span><br><span class="line">lvchange --metadataprofile isulad-thinpool isulad/thinpool</span><br><span class="line">lvs -o+seg_monitor</span><br><span class="line">sed -i <span class="string">&#x27;s/\&quot;storage\-driver\&quot;\: \&quot;overlay2\&quot;/\&quot;storage\-driver\&quot;\: \&quot;devicemapper\&quot;/g&#x27;</span> <span class="variable">$config</span></span><br><span class="line">sed -i <span class="string">&#x27;/   \&quot;storage-opts\&quot;\: \[/&#123;n;d&#125;]&#x27;</span> <span class="variable">$config</span></span><br><span class="line">sed -i <span class="string">&#x27;/   \&quot;storage-opts\&quot;\: \[/a\    \&quot;dm\.thinpooldev\=\/dev\/mapper\/isulad\-thinpool\&quot;\,\n    \&quot;dm\.fs\=ext4\&quot;&#x27;</span> <span class="variable">$config</span></span><br></pre></td></tr></table></figure>
-
-<ol start="3">
-<li> iSulad中devicemapper实现源码分析</li>
-</ol>
-<p>iSulad 中 driver.h 是storage driver 的统一入口，采用依赖倒置设计模式，将其与 overlay、devicemapper 的具体实现进行隔离，driver_devmapper.h 是 devicemapper 实现的统一入口，上层逻辑依赖于统一的接口，无需关心函数的具体实现，devicemapper 中主要函数定义如下：</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">devmapper_init</span><span class="params">(struct graphdriver *driver, <span class="keyword">const</span> <span class="keyword">char</span> *drvier_home, <span class="keyword">const</span> <span class="keyword">char</span> **options, <span class="keyword">size_t</span> len)</span></span>;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">devmapper_create_rw</span><span class="params">(<span class="keyword">const</span> <span class="keyword">char</span> *id, <span class="keyword">const</span> <span class="keyword">char</span> *parent, <span class="keyword">const</span> struct graphdriver *driver,</span></span></span><br><span class="line"><span class="params"><span class="function">                        struct driver_create_opts *create_opts)</span></span>;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">devmapper_create_ro</span><span class="params">(<span class="keyword">const</span> <span class="keyword">char</span> *id, <span class="keyword">const</span> <span class="keyword">char</span> *parent, <span class="keyword">const</span> struct graphdriver *driver,</span></span></span><br><span class="line"><span class="params"><span class="function">                        <span class="keyword">const</span> struct driver_create_opts *create_opts)</span></span>;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">devmapper_rm_layer</span><span class="params">(<span class="keyword">const</span> <span class="keyword">char</span> *id, <span class="keyword">const</span> struct graphdriver *driver)</span></span>;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">char</span> *<span class="title">devmapper_mount_layer</span><span class="params">(<span class="keyword">const</span> <span class="keyword">char</span> *id, <span class="keyword">const</span> struct graphdriver *driver,</span></span></span><br><span class="line"><span class="params"><span class="function">                            <span class="keyword">const</span> struct driver_mount_opts *mount_opts)</span></span>;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">devmapper_umount_layer</span><span class="params">(<span class="keyword">const</span> <span class="keyword">char</span> *id, <span class="keyword">const</span> struct graphdriver *driver)</span></span>;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">bool</span> <span class="title">devmapper_layer_exist</span><span class="params">(<span class="keyword">const</span> <span class="keyword">char</span> *id, <span class="keyword">const</span> struct graphdriver *driver)</span></span>;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">devmapper_apply_diff</span><span class="params">(<span class="keyword">const</span> <span class="keyword">char</span> *id, <span class="keyword">const</span> struct graphdriver *driver, <span class="keyword">const</span> struct io_read_wrapper *content)</span></span>;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">devmapper_get_layer_metadata</span><span class="params">(<span class="keyword">const</span> <span class="keyword">char</span> *id, <span class="keyword">const</span> struct graphdriver *driver, json_map_string_string *map_info)</span></span>;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">devmapper_get_driver_status</span><span class="params">(<span class="keyword">const</span> struct graphdriver *driver, struct graphdriver_status *status)</span></span>;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">devmapper_clean_up</span><span class="params">(struct graphdriver *driver)</span></span>;</span><br></pre></td></tr></table></figure>
-
-<p>镜像中每一层和容器均独占一个dm设备，dm 设备对应以为唯一的 device_id ， 改值记录在 /var/lib/isulad/storage/devicemapper/metadata/hash_id 文件中， 全局唯一。镜像在下载时，每一层基于前一层创建快照，创建容器时，基于镜像顶层创建快照层并，这各过程中均会执行apply diff讲本身的内容添加到当前新建层中并与parent 层内容进行合并。</p>
-<img src="/2021/08/02/isulad-storage-driver/multi-layer.png" class="" title="mutil-layers">
-
-<ol start="4">
-<li>容器中 devicemapper 运维</li>
-</ol>
-<p>iSulad中依赖 lvm2 包并调用库函数实现全部功能，lvm 同时提供了可直接运行的客户端工具 dmsetup， 可快速模拟实现 iSulad 中对thinpool 的操作过程，有助于快速定位 thinpool 的问题。thinpool 中只有1号base 设备是直接创建出来的，其他的设备都是基于 parent 设备的快照设备。</p>
-<ul>
-<li>容器运行</li>
-</ul>
-<p>选一个空闲的(/var/lib/isulad/storage/devicemapper/metadata/ 下grep不到即可)块设备device id 101， 假设镜像的顶层dm 的device id为2， 可进行如下操作即可实现基于该镜像创建出容器的rootfs，dm块设备大小：20971520 × 512（bytes) / 1024^3 = 10(G)</p>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">$</span><span class="bash"> dmsetup message /dev/mapper/isulad-thinpool 0 <span class="string">&quot;create_snap 101 2&quot;</span></span></span><br><span class="line"><span class="meta">$</span><span class="bash"> dmsetup create ghtsnap --table <span class="string">&quot;0 20971520 thin /dev/mapper/isulad-thinpool 101&quot;</span></span></span><br><span class="line"><span class="meta">$</span><span class="bash"> mkdir -p /mnt/ghtsnap</span></span><br><span class="line"><span class="meta">$</span><span class="bash"> mount /dev/mapper/ghtsnap /mnt/ghtsnap</span></span><br><span class="line"><span class="meta">$</span><span class="bash"> ls /mnt/ghtsnap</span></span><br><span class="line">id lost+found rootfs</span><br><span class="line"><span class="meta">$</span><span class="bash"> ls /mnt/ghtsnap/rootfs</span></span><br><span class="line">bin dev etc home root tmp usr var</span><br></pre></td></tr></table></figure>
-
-<ul>
-<li>删除容器</li>
-</ul>
-<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">$</span><span class="bash"> umount /mnt/ghtsnap</span></span><br><span class="line"><span class="meta">$</span><span class="bash"> dmsetup remove ghtsnap <span class="comment">#  这里仅仅移除了块设备，lsblk看不到了,即用户态不可见，但是device id仍然存在于thinpool 设备树中</span></span></span><br><span class="line"><span class="meta">$</span><span class="bash"> dmsetup message /dev/mapper/isulad-thinpool 0 “delete 101” <span class="comment"># 将 device id 从 thinpool 树中移除， 此 id 被thinpool 释放为空闲。</span></span></span><br></pre></td></tr></table></figure>
-
-<ul>
-<li>iSulad 初始化 thinpool 时创建 base 设备</li>
-</ul>
-<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">$ dmsetup message /dev/mapper/isulad-thinpool 0 &quot;create_thin 1&quot;</span><br><span class="line">$ dmsetup create base --table &quot;0 20971520 thin /dev/mapper/isulad-thinpool 1&quot;</span><br><span class="line">$ mkfs.ext4 /dev/mapper/base</span><br></pre></td></tr></table></figure>
-
-<ul>
-<li>镜像下载</li>
-</ul>
-<p>镜像下载时， 镜像从最底层开始基于上一层创建快照层并写入层文件内容， 镜像最底层基于iSulad thinpool 中 base 层创建快照</p>
-<h2 id="参考："><a href="#参考：" class="headerlink" title="参考："></a>参考：</h2><ul>
-<li><a target="_blank" rel="noopener" href="https://www.pianshen.com/article/66341499781/">LINUX - LVM原理及PV、VG、LV、PE、LE关系图</a></li>
-</ul>
-
-      
-
-      
-    </div>
-    <div class="article-info article-info-index">
-      
-      
-	<div class="article-tag tagcloud">
-		<i class="icon-price-tags icon"></i>
-		<ul class="article-tag-list">
-			 
-        		<li class="article-tag-list-item">
-        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color1">iSulad, devicemapper</a>
-        		</li>
-      		
-		</ul>
-	</div>
-
-      
-
-      
-        <p class="article-more-link">
-          <a class="article-more-a" href="/2021/08/02/isulad-storage-driver/">展开全文 >></a>
         </p>
       
 
@@ -1767,11 +1762,15 @@ return o(i(t),arguments.length<2?void 0:u(arguments[1]))}})},function(t,n,r){var
               </li>
              
               <li class="article-tag-list-item">
-                <a href="javascript:void(0)" class="js-tag color5">iSulad,runtime</a>
+                <a href="javascript:void(0)" class="js-tag color1">linux</a>
               </li>
              
               <li class="article-tag-list-item">
                 <a href="javascript:void(0)" class="js-tag color2">iSulad,kata</a>
+              </li>
+             
+              <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color5">iSulad,runtime</a>
               </li>
              
               <li class="article-tag-list-item">

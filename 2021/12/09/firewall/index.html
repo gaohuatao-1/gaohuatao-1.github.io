@@ -6,19 +6,19 @@
   <meta name="renderer" content="webkit">
   <meta http-equiv="X-UA-Compatible" content="IE=edge" >
   <link rel="dns-prefetch" href="http://gaohuatao-1.github.io">
-  <title>研发效率提升小工具 | 高华涛的博客</title>
+  <title>Linux 防火墙管理命令介绍 | 高华涛的博客</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-  <meta name="description" content="画图类 手绘草图  在线画草图 Markdown 命令行式画图 mermaid windows 下亿图  Edraw Max 流程图绘制  优秀博客： 图解设计模式  研发工具 github1s.com 在线看代码，内置vscode，阅读代码很丝滑～">
+  <meta name="description" content="firewalld和iptables的作用都是维护规则，本身不具备防火墙的功能，真正使用规则干活的是内核中的netfilter，firewalld 和 iptables的结构和使用方式不同罢了。两者都是通过systemctl 服务来管理，都有服务端运行， 都需要安装相应的包， iptables和firewalld包。针对两种规则管理工具，网上资料有很多，在这里只做一个总体概括，具体的命令使用方式参">
 <meta property="og:type" content="article">
-<meta property="og:title" content="研发效率提升小工具">
-<meta property="og:url" content="http://gaohuatao-1.github.io/2021/11/19/dev-tools/index.html">
+<meta property="og:title" content="Linux 防火墙管理命令介绍">
+<meta property="og:url" content="http://gaohuatao-1.github.io/2021/12/09/firewall/index.html">
 <meta property="og:site_name" content="高华涛的博客">
-<meta property="og:description" content="画图类 手绘草图  在线画草图 Markdown 命令行式画图 mermaid windows 下亿图  Edraw Max 流程图绘制  优秀博客： 图解设计模式  研发工具 github1s.com 在线看代码，内置vscode，阅读代码很丝滑～">
+<meta property="og:description" content="firewalld和iptables的作用都是维护规则，本身不具备防火墙的功能，真正使用规则干活的是内核中的netfilter，firewalld 和 iptables的结构和使用方式不同罢了。两者都是通过systemctl 服务来管理，都有服务端运行， 都需要安装相应的包， iptables和firewalld包。针对两种规则管理工具，网上资料有很多，在这里只做一个总体概括，具体的命令使用方式参">
 <meta property="og:locale" content="en_US">
-<meta property="article:published_time" content="2021-11-19T02:28:05.000Z">
-<meta property="article:modified_time" content="2021-11-24T03:05:59.910Z">
+<meta property="article:published_time" content="2021-12-09T08:41:34.000Z">
+<meta property="article:modified_time" content="2021-12-09T09:18:33.010Z">
 <meta property="article:author" content="Gao Huatao">
-<meta property="article:tag" content="tools">
+<meta property="article:tag" content="linux">
 <meta name="twitter:card" content="summary">
   
     <link rel="alternative" href="/atom.xml" title="高华涛的博客" type="application/atom+xml">
@@ -155,36 +155,68 @@
             <canvas data-colors="#eaeaea" data-sectionHeight="100" data-contentId="js-content" id="myCanvas1" class="anm-canvas"></canvas>
           </div>
           <div id="js-content" class="content-ll">
-            <article id="post-dev-tools" class="article article-type-post " itemscope itemprop="blogPost">
+            <article id="post-firewall" class="article article-type-post " itemscope itemprop="blogPost">
   <div class="article-inner">
     
       <header class="article-header">
         
   
     <h1 class="article-title" itemprop="name">
-      研发效率提升小工具
+      Linux 防火墙管理命令介绍
     </h1>
   
 
         
-        <a href="/2021/11/19/dev-tools/" class="archive-article-date">
-  	<time datetime="2021-11-19T02:28:05.000Z" itemprop="datePublished"><i class="icon-calendar icon"></i>2021-11-19</time>
+        <a href="/2021/12/09/firewall/" class="archive-article-date">
+  	<time datetime="2021-12-09T08:41:34.000Z" itemprop="datePublished"><i class="icon-calendar icon"></i>2021-12-09</time>
 </a>
         
       </header>
     
     <div class="article-entry" itemprop="articleBody">
       
-        <h2 id="画图类"><a href="#画图类" class="headerlink" title="画图类"></a>画图类</h2><ol>
-<li><a target="_blank" rel="noopener" href="https://excalidraw.com/">手绘草图</a>  在线画草图</li>
-<li>Markdown 命令行式画图 mermaid</li>
-<li>windows 下亿图  Edraw Max 流程图绘制</li>
-</ol>
-<h2 id="优秀博客："><a href="#优秀博客：" class="headerlink" title="优秀博客："></a>优秀博客：</h2><ol>
-<li><a target="_blank" rel="noopener" href="https://refactoringguru.cn/design-patterns/catalog">图解设计模式</a></li>
-</ol>
-<h2 id="研发工具"><a href="#研发工具" class="headerlink" title="研发工具"></a>研发工具</h2><ol>
-<li>github1s.com 在线看代码，内置vscode，阅读代码很丝滑～</li>
+        <p>firewalld和iptables的作用都是维护规则，本身不具备防火墙的功能，真正使用规则干活的是内核中的netfilter，firewalld 和 iptables的结构和使用方式不同罢了。两者都是通过systemctl 服务来管理，都有服务端运行， 都需要安装相应的包， iptables和firewalld包。针对两种规则管理工具，网上资料有很多，在这里只做一个总体概括，具体的命令使用方式参考链接即可。</p>
+<h2 id="一、iptables"><a href="#一、iptables" class="headerlink" title="一、iptables"></a>一、iptables</h2><h3 id="规则生效"><a href="#规则生效" class="headerlink" title="规则生效"></a>规则生效</h3><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">iptables -A INPUT -p tcp -m state --state NEW -m tcp --dport 82 -j ACCEPT</span><br></pre></td></tr></table></figure>
+
+<p>通过iptables命令添加规则，规则立即生效，但是重启iptables服务或者linux系统后就消失了，可通过如下方式来永久生效:</p>
+<ul>
+<li>使用命令增加规则，保存到规则文件， 重启系统或者iptables都会生效</li>
+</ul>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">$ service iptables save</span><br><span class="line">iptables: Saving firewall rules to /etc/sysconfig/iptables: [ OK ]</span><br><span class="line"><span class="comment"># 修改 /etc/sysconfig/iptables 文件，重启iptables服务即可生效</span></span><br><span class="line">$ systemctl restart iptables.service</span><br></pre></td></tr></table></figure>
+
+<ul>
+<li>直接修改 /etc/sysconfig/iptables 文件，重启系统或者iptables都会生效</li>
+</ul>
+<h3 id="规则链"><a href="#规则链" class="headerlink" title="规则链"></a>规则链</h3><p>任何数据包，只要经过分级必将经历其中一个</p>
+<ul>
+<li>PREROUTING （路由前）</li>
+<li>INPUT（数据包流入口）</li>
+<li>FORWARD（转发关卡）</li>
+<li>OUTPUT（数据包出口）</li>
+<li>POSTROUTING(路由后)</li>
+</ul>
+<h3 id="规则表"><a href="#规则表" class="headerlink" title="规则表"></a>规则表</h3><ul>
+<li><p>raw: 优先级最高，表示按照对数据包的操作区分的</p>
+</li>
+<li><p>filter: 一般的过滤功能 </p>
+</li>
+<li><p>nat: 端口映射、地址映射</p>
+</li>
+<li><p>mangle: 用于对特定数据包的修改</p>
+</li>
+</ul>
+<p><a target="_blank" rel="noopener" href="https://blog.csdn.net/skh2015java/article/details/82528397">iptables规则详解</a></p>
+<h2 id="二、firewalld"><a href="#二、firewalld" class="headerlink" title="二、firewalld"></a>二、firewalld</h2><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">$ systemctl status firewalld</span><br><span class="line">$ firewall-cmd --state <span class="comment"># 查看防火墙状态</span></span><br><span class="line">$ firewall-cmd --list-all <span class="comment"># 查看全部规则</span></span><br><span class="line">$ firewall-cmd --reload <span class="comment"># 重新加载配置文件</span></span><br></pre></td></tr></table></figure>
+
+<p>firewalld防火墙规则分为两种状态：</p>
+<p>一种是runtime，指正在运行生效的状态，在runtime状态添加新的防火墙规则，这些规则会立即生效，但是重新加载防火墙配置或者再重启系统后这些规则将会失效 另一种是permanent，指永久生效的状态，在permanent状态添加新的防火墙规则，这些规则不会马上生效，需要重新加载防火墙配置或者重启系统后生效 在使用firewall-cmd命令管理防火墙时，需要添加为永久生效的规则需在配置规则时添加–permanent选项（否则所有命令都是作用于runtime，运行时配置）</p>
+<p>如果让永久生效规则立即覆盖当前规则生效使用，还需要使用firewall-cmd –reload命令重新加载防火墙配置</p>
+<p><a target="_blank" rel="noopener" href="https://cloud.tencent.com/developer/article/1691072">命令参考</a></p>
+<h2 id="三、firewalld-和-iptables-的区别"><a href="#三、firewalld-和-iptables-的区别" class="headerlink" title="三、firewalld 和 iptables 的区别"></a>三、firewalld 和 iptables 的区别</h2><ol>
+<li>firewalld 使用区域和服务而不是链式规则</li>
+<li>firewalld 默认是拒绝的，需要设置才能放行， iptables默认是允许的，需要拒绝才能限制。</li>
+<li>firewalld 是iptables 的一个封装， 更容易管理iptables规则，不是替代，iptables命令仍可用于firewalld， 建议firewalld时仅使用自身命令。</li>
+<li>firewalld 可以动态修改单条规则， 而不需要像iptables那样， 修改了规则后必须全部刷新才生效。</li>
 </ol>
 
       
@@ -220,7 +252,7 @@
 		<ul class="article-tag-list">
 			 
         		<li class="article-tag-list-item">
-        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color1">tools</a>
+        			<a href="javascript:void(0)" class="js-tag article-tag-list-link color1">linux</a>
         		</li>
       		
 		</ul>
@@ -276,7 +308,7 @@
     <a class="close js-modal-close" href="javascript:;"><i class="icon icon-close"></i></a>
     <p>扫一扫，分享到微信</p>
     <div class="wx-qrcode">
-      <img src="//pan.baidu.com/share/qrcode?url=http://gaohuatao-1.github.io/2021/11/19/dev-tools/" alt="微信分享二维码">
+      <img src="//pan.baidu.com/share/qrcode?url=http://gaohuatao-1.github.io/2021/12/09/firewall/" alt="微信分享二维码">
     </div>
 </div>
 
@@ -290,18 +322,9 @@
   
 <nav id="article-nav">
   
-    <a href="/2021/12/09/firewall/" id="article-nav-newer" class="article-nav-link-wrap">
-      <i class="icon-circle-left"></i>
-      <div class="article-nav-title">
-        
-          Linux 防火墙管理命令介绍
-        
-      </div>
-    </a>
   
-  
-    <a href="/2021/09/30/containerd-setup-compile-env/" id="article-nav-older" class="article-nav-link-wrap">
-      <div class="article-nav-title">containerd devmapper 及 CNI 配置</div>
+    <a href="/2021/11/19/dev-tools/" id="article-nav-older" class="article-nav-link-wrap">
+      <div class="article-nav-title">研发效率提升小工具</div>
       <i class="icon-circle-right"></i>
     </a>
   
