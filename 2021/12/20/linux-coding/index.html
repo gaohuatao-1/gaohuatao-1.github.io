@@ -8,15 +8,15 @@
   <link rel="dns-prefetch" href="http://gaohuatao-1.github.io">
   <title>零散知识记录 | 高华涛的博客</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-  <meta name="description" content="一、linux  c 编程 PKG_CONFIG_PATH 和 LD_LIBRARY_PATH  前者用作编译链接阶段查找库文件和头文件路径，后者是运行时查找动态库路径，找到动态库载入。 编译安装运行如下命令：export PKG_CONFIG_PATH&#x3D;&#x2F;usr&#x2F;local&#x2F;lib&#x2F;pkgconfig:${PKG_CONFIG_PATH}  管道读写规则  当没有数据可读时  O_NONBLOC">
+  <meta name="description" content="一、linux  c 编程1 PKG_CONFIG_PATH 和 LD_LIBRARY_PATH前者用作编译链接阶段查找库文件和头文件路径，后者是运行时查找动态库路径，找到动态库载入。 编译安装运行如下命令：export PKG_CONFIG_PATH&#x3D;&#x2F;usr&#x2F;local&#x2F;lib&#x2F;pkgconfig:${PKG_CONFIG_PATH} 2 管道读写规则当没有数据可读时  O_NONBLOCK">
 <meta property="og:type" content="article">
 <meta property="og:title" content="零散知识记录">
 <meta property="og:url" content="http://gaohuatao-1.github.io/2021/12/20/linux-coding/index.html">
 <meta property="og:site_name" content="高华涛的博客">
-<meta property="og:description" content="一、linux  c 编程 PKG_CONFIG_PATH 和 LD_LIBRARY_PATH  前者用作编译链接阶段查找库文件和头文件路径，后者是运行时查找动态库路径，找到动态库载入。 编译安装运行如下命令：export PKG_CONFIG_PATH&#x3D;&#x2F;usr&#x2F;local&#x2F;lib&#x2F;pkgconfig:${PKG_CONFIG_PATH}  管道读写规则  当没有数据可读时  O_NONBLOC">
+<meta property="og:description" content="一、linux  c 编程1 PKG_CONFIG_PATH 和 LD_LIBRARY_PATH前者用作编译链接阶段查找库文件和头文件路径，后者是运行时查找动态库路径，找到动态库载入。 编译安装运行如下命令：export PKG_CONFIG_PATH&#x3D;&#x2F;usr&#x2F;local&#x2F;lib&#x2F;pkgconfig:${PKG_CONFIG_PATH} 2 管道读写规则当没有数据可读时  O_NONBLOCK">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2021-12-20T03:12:17.000Z">
-<meta property="article:modified_time" content="2021-12-28T09:07:27.909Z">
+<meta property="article:modified_time" content="2021-12-28T09:12:14.190Z">
 <meta property="article:author" content="Gao Huatao">
 <meta property="article:tag" content="linux">
 <meta name="twitter:card" content="summary">
@@ -175,15 +175,9 @@
     
     <div class="article-entry" itemprop="articleBody">
       
-        <h2 id="一、linux-c-编程"><a href="#一、linux-c-编程" class="headerlink" title="一、linux  c 编程"></a>一、linux  c 编程</h2><ol>
-<li><h3 id="PKG-CONFIG-PATH-和-LD-LIBRARY-PATH"><a href="#PKG-CONFIG-PATH-和-LD-LIBRARY-PATH" class="headerlink" title="PKG_CONFIG_PATH 和 LD_LIBRARY_PATH"></a>PKG_CONFIG_PATH 和 LD_LIBRARY_PATH</h3></li>
-</ol>
-<p>前者用作编译链接阶段查找库文件和头文件路径，后者是运行时查找动态库路径，找到动态库载入。</p>
+        <h2 id="一、linux-c-编程"><a href="#一、linux-c-编程" class="headerlink" title="一、linux  c 编程"></a>一、linux  c 编程</h2><h3 id="1-PKG-CONFIG-PATH-和-LD-LIBRARY-PATH"><a href="#1-PKG-CONFIG-PATH-和-LD-LIBRARY-PATH" class="headerlink" title="1 PKG_CONFIG_PATH 和 LD_LIBRARY_PATH"></a>1 PKG_CONFIG_PATH 和 LD_LIBRARY_PATH</h3><p>前者用作编译链接阶段查找库文件和头文件路径，后者是运行时查找动态库路径，找到动态库载入。</p>
 <p>编译安装运行如下命令：export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:${PKG_CONFIG_PATH}</p>
-<ol start="2">
-<li><h3 id="管道读写规则"><a href="#管道读写规则" class="headerlink" title="管道读写规则"></a>管道读写规则</h3></li>
-</ol>
-<p>当没有数据可读时</p>
+<h3 id="2-管道读写规则"><a href="#2-管道读写规则" class="headerlink" title="2 管道读写规则"></a>2 管道读写规则</h3><p>当没有数据可读时</p>
 <ul>
 <li>O_NONBLOCK disable: read调用阻塞，即进程暂停执行， 一直等到有数据来到为止.</li>
 <li>O_NONBLOCK enable: read 调用返回-1，errno值为EAGAIN.</li>
@@ -195,10 +189,7 @@
 </ul>
 <p>如果所有管道写端对应的文件描述符被关闭， 则read 返回0. 如果所有管道读端对应的文件描述符被关闭， 则write操作会产生信号SIGPIPE， 当要写入的数据量不大于PIPE_BUF时， linux将保证写入的原子性。 当要写入的数据量大于PIPE_BUF时， linux将不在保证写入的原子性。</p>
 <p><a target="_blank" rel="noopener" href="https://www.cnblogs.com/mickole/p/3192461.html">参考</a></p>
-<h2 id="二、源码编译"><a href="#二、源码编译" class="headerlink" title="二、源码编译"></a>二、源码编译</h2><ol>
-<li>docker 社区编译</li>
-</ol>
-<p>docker/engine fork自moby/moby，非容器话编译： ./hack/make.sh dynbinary</p>
+<h2 id="二、源码编译"><a href="#二、源码编译" class="headerlink" title="二、源码编译"></a>二、源码编译</h2><h3 id="1-docker-社区编译"><a href="#1-docker-社区编译" class="headerlink" title="1 docker 社区编译"></a>1 docker 社区编译</h3><p>docker/engine fork自moby/moby，非容器话编译： ./hack/make.sh dynbinary</p>
 <p>docker/cli这个是客户端的仓库</p>
 <p>docker/docker-ce 这个是社区版， 1.20开始被弃用了</p>
 <h2 id="三、shell命令"><a href="#三、shell命令" class="headerlink" title="三、shell命令"></a>三、shell命令</h2><figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#</span><span class="bash"> 将标准输出和标准错误同时打印到空设备，就是什么都不显示。1代表stdout, 默认值为1， 1 &gt; /dev/null，可以简写为 &gt; /dev/null</span></span><br><span class="line"><span class="meta">$</span><span class="bash"> cmd &gt; /dev/null 2&gt;&amp;1</span></span><br></pre></td></tr></table></figure>
