@@ -16,7 +16,7 @@
 <meta property="og:description" content="kata-agent 编译运行编译kata-agent 并 替换 intird 1234567891011121314$ git clone $ cd $GOPATH&#x2F;src&#x2F;github.com&#x2F;kata-containers&#x2F;kata-containers$ cd src&#x2F;agent&#x2F;&#x2F; arm 上会执行交叉编译，按照提示安装相应的 toolchain， 或者执行cargo build$ ma">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2021-09-30T03:34:08.000Z">
-<meta property="article:modified_time" content="2021-09-30T04:08:37.225Z">
+<meta property="article:modified_time" content="2021-12-30T04:18:31.144Z">
 <meta property="article:author" content="Gao Huatao">
 <meta property="article:tag" content="kata">
 <meta name="twitter:card" content="summary">
@@ -214,6 +214,8 @@
     virtcontainers -->> shimv2: Start Container done
     deactivate virtcontainers
     shimv2 ->> isulad: Start done</pre>
+
+<h2 id="qmp-命令交互"><a href="#qmp-命令交互" class="headerlink" title="qmp 命令交互"></a>qmp 命令交互</h2><figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">$</span><span class="bash"> nc -U /run/vc/vm/&lt;id&gt;/qmp.sock</span></span><br><span class="line">&#123;&quot;QMP&quot;: &#123;&quot;version&quot;:....&#125;&#125;</span><br></pre></td></tr></table></figure>
 
 
       
@@ -499,11 +501,15 @@ return o(i(t),arguments.length<2?void 0:u(arguments[1]))}})},function(t,n,r){var
               </li>
              
               <li class="article-tag-list-item">
+                <a href="javascript:void(0)" class="js-tag color1">iSulad, devicemapper</a>
+              </li>
+             
+              <li class="article-tag-list-item">
                 <a href="javascript:void(0)" class="js-tag color5">kata</a>
               </li>
              
               <li class="article-tag-list-item">
-                <a href="javascript:void(0)" class="js-tag color1">iSulad, devicemapper</a>
+                <a href="javascript:void(0)" class="js-tag color5">rust</a>
               </li>
              
               <li class="article-tag-list-item">
